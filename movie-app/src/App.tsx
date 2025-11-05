@@ -6,6 +6,7 @@ import GenreScreen from "./screens/GenreScreen";
 import MovieScreen from "./screens/MovieScreen";
 import type { User, Genre, Movie } from "./types";
 
+
 // 데모 장르/영화 데이터 (나중에 TMDb + DB로 교체 가능)
 const DEMO_GENRES: Genre[] = [
   { id: 1, slug: "action", name: "액션" },
