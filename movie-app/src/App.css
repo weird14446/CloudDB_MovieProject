@@ -383,18 +383,37 @@ body {
 /* ========= 영화 리스트 메인 ========= */
 
 .movie-main {
-  max-width: 1040px;
-  margin: 32px auto 32px;
-  padding: 0 24px 32px;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 2rem;
+}
+
+.movie-main__search {
+  width: 100%;
+  font-size: 0.85rem;
+}
+
+.movie-main__sticky {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  padding-bottom: 0.75rem;
+  margin-bottom: 0.75rem;
+  backdrop-filter: blur(14px);
+  background: linear-gradient(to bottom,
+      rgba(15, 23, 42, 0.98),
+      rgba(15, 23, 42, 0.9),
+      rgba(15, 23, 42, 0.85),
+      rgba(15, 23, 42, 0));
 }
 
 /* 상단: 로고 + 프로필 + 처음부터 다시 선택 */
 .movie-main__top {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 16px;
-  margin-bottom: 20px;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
 }
 
 .movie-main__brand {
@@ -411,10 +430,33 @@ body {
 
 .movie-main__header {
   display: flex;
+  align-items: flex-end;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 18px;
-  align-items: center;
+  gap: 1rem;
+}
+
+.movie-main__header-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+  min-width: 220px;
+}
+
+@media (max-width: 768px) {
+  .movie-main__header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .movie-main__header-right {
+    width: 100%;
+    align-items: stretch;
+  }
+
+  .movie-main__search {
+    width: 100%;
+  }
 }
 
 .accent {
@@ -425,8 +467,9 @@ body {
 
 .movie-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 1rem;
+  justify-content: center;
 }
 
 .movie-card {
@@ -439,6 +482,11 @@ body {
     border-color 0.16s ease;
 }
 
+.movie-card.movie-card--compact {
+  max-width: 210px;
+  margin: 0 auto;
+}
+
 .movie-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
@@ -446,10 +494,10 @@ body {
 }
 
 .movie-card__poster {
-  width: 100%;
-  aspect-ratio: 2 / 3;
-  background: #020617;
+  border-radius: 0.9rem;
   overflow: hidden;
+  aspect-ratio: 2 / 3;
+  background: radial-gradient(circle at top, #1e293b, #020617);
 }
 
 .movie-card__poster img {
@@ -470,30 +518,23 @@ body {
 }
 
 .movie-card__body {
-  padding: 10px 10px 12px;
+  padding-top: 0.4rem;
 }
 
 .movie-card__title {
-  margin: 0 0 2px;
-  font-size: 14px;
-  font-weight: 600;
-  color: #f9fafb;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: 0.9rem;
 }
 
 .movie-card__year {
-  margin: 0;
-  font-size: 12px;
-  color: #9ca3af;
+  font-size: 0.8rem;
+  opacity: 0.8;
 }
 
 .movie-card__genres {
-  margin-top: 6px;
+  margin-top: 0.2rem;
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 0.25rem;
 }
 
 /* 빈 상태 */

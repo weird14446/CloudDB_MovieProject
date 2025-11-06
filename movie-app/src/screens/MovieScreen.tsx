@@ -73,92 +73,87 @@ const MovieScreen: React.FC<MovieScreenProps> = ({
     return (
         <div className="app app--dark">
             <main className="movie-main">
-                {/* 상단 바: 로고 + 우측 액션 */}
-                <header className="movie-main__top">
-                    <div className="movie-main__brand">
-                        <div className="topbar-logo__mark">F</div>
-                        <div>
-                            <div className="topbar-logo__title">FilmNavi</div>
-                            <div className="topbar-logo__subtitle">
-                                {user
-                                    ? `${user.name}님을 위한 영화 추천`
-                                    : "로그인 없이 둘러보고, 원하면 취향 설정하기"}
+                {/* ✅ 상단 고정 영역(로고 + 로그인/로그아웃 + 검색/선호 장르) */}
+                <div className="movie-main__sticky">
+                    {/* 상단 바: 로고 + 우측 액션 */}
+                    <header className="movie-main__top">
+                        <div className="movie-main__brand">
+                            <div className="topbar-logo__mark">F</div>
+                            <div>
+                                <div className="topbar-logo__title">FilmNavi</div>
+                                <div className="topbar-logo__subtitle">
+                                    {user
+                                        ? `${user.name}님을 위한 영화 추천`
+                                        : "로그인 없이 둘러보고, 원하면 취향 설정하기"}
+                                </div>
                             </div>
                         </div>
-                    </div>
 
-                    <div className="movie-main__top-right">
-                        <button
-                            className="btn btn--ghost btn--sm"
-                            onClick={onOpenGenres}
-                        >
-                            선호 장르 선택
-                        </button>
-
-                        {user ? (
-                            <>
-                                <div className="user-chip">
-                                    <div className="user-chip__name">{user.name}</div>
-                                    <div className="user-chip__email">{user.email}</div>
-                                </div>
-                                <button
-                                    className="btn btn--ghost btn--sm"
-                                    onClick={onLogout}
-                                >
-                                    로그아웃
-                                </button>
-                            </>
-                        ) : (
+                        <div className="movie-main__top-right">
                             <button
                                 className="btn btn--ghost btn--sm"
-                                onClick={onOpenLogin}
+                                onClick={onOpenGenres}
                             >
-                                로그인
+                                선호 장르 선택
                             </button>
-                        )}
-                    </div>
-                </header>
 
-                {/* 선택한 장르 + 검색 + 개수 */}
-                <div className="movie-main__header">
-                    <div>
-                        <div className="badge">Movies</div>
-                        <h2 className="card-title">
-                            선택한 장르: <span className="accent">{labelSelected}</span>
-                        </h2>
-                        <p className="card-subtitle">
-                            선호 장르를 설정하면 관련도가 높은 영화가 위에 정렬됩니다.
-                            (설정하지 않으면 전체 리스트가 노출됩니다.)
-                        </p>
-                    </div>
-
-                    {/* 오른쪽: 총 개수 + 검색창 */}
-                    <div
-                        style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            alignItems: "flex-end",
-                            gap: "0.5rem",
-                            minWidth: "220px",
-                        }}
-                    >
-                        <div className="pill pill--outline">
-                            총 <strong>{visibleMovies.length}</strong> 편
+                            {user ? (
+                                <>
+                                    <div className="user-chip">
+                                        <div className="user-chip__name">{user.name}</div>
+                                        <div className="user-chip__email">{user.email}</div>
+                                    </div>
+                                    <button
+                                        className="btn btn--ghost btn--sm"
+                                        onClick={onLogout}
+                                    >
+                                        로그아웃
+                                    </button>
+                                </>
+                            ) : (
+                                <button
+                                    className="btn btn--ghost btn--sm"
+                                    onClick={onOpenLogin}
+                                >
+                                    로그인
+                                </button>
+                            )}
                         </div>
-                        <input
-                            className="form-input"
-                            style={{ width: "100%", fontSize: "0.85rem" }}
-                            placeholder="제목 / 장르 / 연도 검색"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                        />
+                    </header>
+
+                    {/* 선택한 장르 + 검색 + 개수 */}
+                    <div className="movie-main__header">
+                        <div>
+                            <div className="badge">Movies</div>
+                            <h2 className="card-title">
+                                선택한 장르:{" "}
+                                <span className="accent">{labelSelected}</span>
+                            </h2>
+                            <p className="card-subtitle">
+                                선호 장르를 설정하면 관련도가 높은 영화가 위에 정렬됩니다.
+                                (설정하지 않으면 전체 리스트가 노출됩니다.)
+                            </p>
+                        </div>
+
+                        {/* 오른쪽: 총 개수 + 검색창 */}
+                        <div className="movie-main__header-right">
+                            <div className="pill pill--outline">
+                                총 <strong>{visibleMovies.length}</strong> 편
+                            </div>
+                            <input
+                                className="form-input movie-main__search"
+                                placeholder="제목 / 장르 / 연도 검색"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                        </div>
                     </div>
                 </div>
 
-                {/* 정렬 + 검색이 적용된 영화 리스트 */}
+                {/* ✅ 정렬 + 검색이 적용된 영화 리스트 (스크롤 영역) */}
                 <section className="movie-grid">
                     {visibleMovies.map((m) => (
-                        <article key={m.id} className="movie-card">
+                        <article key={m.id} className="movie-card movie-card--compact">
                             <button
                                 type="button"
                                 className="movie-card__clickable"
