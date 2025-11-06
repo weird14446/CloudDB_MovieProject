@@ -1,9 +1,9 @@
 import React, { useState } from "react";
 
-type LoginScreenProps = {
-    onLogin: (name: string, email: string, password: string) => void | Promise<void>;
+type SignupScreenProps = {
+    onSignup: (name: string, email: string, password: string) => void | Promise<void>;
     onClose: () => void;
-    onGoSignup: () => void;
+    onGoLogin: () => void;
 };
 
 type StoredUser = {
@@ -33,11 +33,20 @@ function loadUsers(): StoredUser[] {
     }
 }
 
-const LoginScreen: React.FC<LoginScreenProps> = ({
-    onLogin,
+function saveUsers(users: StoredUser[]) {
+    try {
+        localStorage.setItem(USERS_KEY, JSON.stringify(users));
+    } catch {
+        // 실패해도 무시
+    }
+}
+
+const SignupScreen: React.FC<SignupScreenProps> = ({
+    onSignup,
     onClose,
-    onGoSignup,
+    onGoLogin,
 }) => {
+    const [name, setName] = useState<string>("");
     const [email, setEmail] = useState<string>("");
     const [pw, setPw] = useState<string>("");
     const [error, setError] = useState<string | null>(null);
@@ -47,8 +56,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
         e.preventDefault();
         setError(null);
 
-        if (!email || !pw) {
-            setError("이메일과 비밀번호를 입력해주세요.");
+        if (!name.trim() || !email || !pw) {
+            setError("이름, 이메일, 비밀번호를 모두 입력해주세요.");
             return;
         }
 
@@ -56,19 +65,25 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
             setBusy(true);
 
             const users = loadUsers();
-            const found = users.find(
-                (u) => u.email === email.trim() && u.password === pw
-            );
-
-            if (!found) {
-                setError("이메일 또는 비밀번호가 올바르지 않습니다.");
+            const exists = users.find((u) => u.email === email.trim());
+            if (exists) {
+                setError("이미 가입된 이메일입니다. 로그인으로 진행해주세요.");
                 return;
             }
 
-            await Promise.resolve(onLogin(found.name, found.email, pw));
+            const newUser: StoredUser = {
+                name: name.trim(),
+                email: email.trim(),
+                password: pw,
+                createdAt: new Date().toISOString(),
+            };
+
+            saveUsers([...users, newUser]);
+
+            await Promise.resolve(onSignup(newUser.name, newUser.email, pw));
         } catch (err) {
             const msg =
-                err instanceof Error ? err.message : "로그인 중 오류가 발생했습니다.";
+                err instanceof Error ? err.message : "회원가입 중 오류가 발생했습니다.";
             setError(msg);
         } finally {
             setBusy(false);
@@ -84,7 +99,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
                         <div className="app-logo__text">
                             <div className="app-logo__title">FilmNavi</div>
                             <div className="app-logo__subtitle">
-                                로그인해서 취향 맞는 영화 찾기
+                                회원가입하고 취향 맞는 영화 찾기
                             </div>
                         </div>
                     </div>
@@ -100,6 +115,16 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
                 {error && <div className="alert alert--error">{error}</div>}
 
                 <form className="form" onSubmit={handleSubmit}>
+                    <label className="form-field">
+                        <span className="form-label">이름</span>
+                        <input
+                            className="form-input"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            placeholder="홍길동"
+                        />
+                    </label>
+
                     <label className="form-field">
                         <span className="form-label">이메일</span>
                         <input
@@ -127,18 +152,18 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
                     </label>
 
                     <button className="btn btn--primary" disabled={busy}>
-                        {busy ? "로그인 중..." : "로그인"}
+                        {busy ? "회원가입 중..." : "회원가입 후 시작하기"}
                     </button>
 
                     <p className="form-hint" style={{ marginTop: 8, textAlign: "center" }}>
-                        아직 계정이 없나요?{" "}
+                        이미 계정이 있나요?{" "}
                         <button
                             type="button"
                             className="btn btn--ghost btn--sm"
-                            onClick={onGoSignup}
+                            onClick={onGoLogin}
                             style={{ paddingInline: 10 }}
                         >
-                            회원가입
+                            로그인으로 돌아가기
                         </button>
                     </p>
                 </form>
@@ -147,4 +172,4 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
     );
 };
 
-export default LoginScreen;
+export default SignupScreen;

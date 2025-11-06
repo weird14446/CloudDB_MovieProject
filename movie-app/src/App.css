@@ -63,7 +63,7 @@ body {
 }
 
 .login-card {
-  max-width: 460px;
+  max-width: 480px;
 }
 
 .genre-card {
@@ -225,6 +225,7 @@ body {
   cursor: pointer;
   transition: background-color 0.16s ease, border-color 0.16s ease,
     color 0.16s ease, transform 0.1s ease, box-shadow 0.16s ease;
+  white-space: nowrap;
 }
 
 .btn:disabled {
@@ -539,4 +540,363 @@ body {
     align-self: stretch;
     justify-content: space-between;
   }
+}
+
+/* 카드 전체를 버튼처럼 클릭 가능하게 */
+.movie-card__clickable {
+  display: block;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* 상세 모달 레이아웃 */
+.movie-detail {
+  max-width: 960px;
+  /* 영화 정보는 좀 넓게 */
+  display: flex;
+  flex-direction: column;
+}
+
+.movie-detail__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  gap: 1rem;
+}
+
+.movie-detail__title {
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+
+.movie-detail__year {
+  font-size: 1rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.movie-detail__layout {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: 1.5rem;
+  overflow: hidden;
+  /* 전체 레이아웃은 고정 */
+}
+
+@media (max-width: 768px) {
+  .movie-detail__layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.movie-detail__left {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.movie-detail__poster img {
+  width: 100%;
+  border-radius: 1rem;
+  display: block;
+  object-fit: cover;
+}
+
+.movie-detail__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+}
+
+.movie-detail__meta-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.movie-detail__trailer-btn {
+  margin-top: 0.25rem;
+}
+
+.movie-detail__trailer {
+  margin-top: 0.75rem;
+}
+
+.movie-detail__trailer-inner {
+  position: relative;
+  width: 100%;
+  padding-bottom: 56.25%;
+  /* 16:9 */
+  border-radius: 0.75rem;
+  overflow: hidden;
+  background: #000;
+}
+
+.movie-detail__trailer-inner iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+/* 오른쪽 영역 */
+.movie-detail__right {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  overflow-y: auto;
+  /* ✅ 내용이 많으면 여기만 스크롤 */
+}
+
+.movie-detail__section {
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.movie-detail__section:last-child {
+  border-bottom: none;
+}
+
+.movie-detail__section-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+}
+
+.movie-detail__overview {
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.movie-detail__empty {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* 출연진 리스트 */
+.cast-list {
+  display: flex;
+  gap: 0.75rem;
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+}
+
+.cast-card {
+  min-width: 120px;
+  max-width: 140px;
+  background: rgba(15, 23, 42, 0.75);
+  border-radius: 0.75rem;
+  padding: 0.5rem;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.cast-card__avatar {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  border-radius: 0.6rem;
+  overflow: hidden;
+  background: #0f172a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.35rem;
+}
+
+.cast-card__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cast-card__initial {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: rgba(248, 250, 252, 0.85);
+}
+
+.cast-card__name {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.cast-card__role {
+  font-size: 0.8rem;
+  color: rgba(148, 163, 184, 1);
+}
+
+/* 리뷰 리스트 */
+.review-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 160px;
+  /* 필요하면 140~200 사이로 조절해도 됨 */
+  overflow-y: auto;
+  margin-bottom: 0.75rem;
+}
+
+.review-item {
+  padding: 0.5rem 0.7rem;
+  border-radius: 0.6rem;
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.review-item__header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  margin-bottom: 0.25rem;
+}
+
+.review-item__author {
+  font-weight: 600;
+}
+
+.review-item__rating {
+  color: #fbbf24;
+}
+
+.review-item__content {
+  font-size: 0.85rem;
+}
+
+/* 리뷰 작성 폼 */
+.review-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.review-form__row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.review-form__field {
+  flex: 1;
+}
+
+.review-form__field--rating {
+  max-width: 120px;
+}
+
+.review-form__textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+
+/* 버튼 공통 - 줄바꿈 방지 (취소 버튼 세로 깨짐 방지) */
+.btn {
+  white-space: nowrap;
+}
+
+.btn--full {
+  width: 100%;
+  justify-content: center;
+}
+
+/* 모달 하단 버튼이 너무 좁지 않게 */
+.modal-footer .btn {
+  min-width: 96px;
+  /* 버튼 가로 폭 확보 */
+  justify-content: center;
+}
+
+.review-form__author-name {
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  font-size: 0.9rem;
+}
+
+/* ------ 블러 & 모달 레이아웃 ------ */
+
+.app-root {
+  position: relative;
+  min-height: 100vh;
+}
+
+.app-blur-wrapper {
+  transition: filter 0.2s ease, transform 0.2s ease, opacity 0.2s ease;
+}
+
+.app-blur-wrapper--blurred {
+  filter: blur(4px);
+  transform: scale(0.99);
+  opacity: 0.9;
+  pointer-events: none;
+  user-select: none;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+  z-index: 10;
+}
+
+/* 로그인 / 장르 선택 모달 공통 컨테이너 */
+/* 기존 .modal 정의를 이걸로 교체 */
+/* ---- 모달 전체 레이아웃 ---- */
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+
+  display: flex;
+  align-items: center;
+  /* 가운데 정렬 */
+  justify-content: center;
+
+  padding: 1.5rem;
+  /* 모달이 전체 화면을 덮기 때문에
+     스크롤 이벤트가 body까지 전파되지 않음 */
+}
+
+/* 모달 카드 크기 조정 */
+/* 기존 .modal-card를 이렇게 수정 */
+.modal-card {
+  width: 100%;
+  max-height: 85vh;
+  /* 화면 높이의 85%까지만 */
+  overflow: hidden;
+  /* 전체 카드가 화면 밖으로 넘치지 않도록 */
+  border-radius: 1rem;
+}
+
+/* 모달 헤더/푸터 간단 배치 (필요하면 사용) */
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
 }

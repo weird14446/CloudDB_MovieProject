@@ -1,11 +1,14 @@
-// src/App.tsx
-import React, { useState } from "react";
+// 기존
+// import React, { useState } from "react";
+// 이렇게 되어 있을 텐데 ↓ 로 바꿔줘
+import React, { useState, useEffect } from "react";
 import "./App.css";
 import LoginScreen from "./screens/LoginScreen";
+import SignupScreen from "./screens/SignupScreen";
 import GenreScreen from "./screens/GenreScreen";
 import MovieScreen from "./screens/MovieScreen";
-import type { User, Genre, Movie } from "./types";
-
+import MovieDetailModal from "./components/MovieDetailModal";
+import type { User, Genre, Movie, Review } from "./types";
 
 // 데모 장르/영화 데이터 (나중에 TMDb + DB로 교체 가능)
 const DEMO_GENRES: Genre[] = [
@@ -24,6 +27,30 @@ const DEMO_MOVIES: Movie[] = [
     genres: ["action"],
     posterUrl:
       "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?q=80&w=800&auto=format&fit=crop",
+    overview: "도시를 배경으로 한 스릴 넘치는 추격 액션 영화.",
+    releaseDate: "2020-07-15",
+    status: "Released",
+    budget: 80000000,
+    revenue: 210000000,
+    runtimeMinutes: 123,
+    trailerKey: "ScMzIvxBSi4", // 데모용 유튜브 ID
+    trailerSite: "YouTube",
+    cast: [
+      {
+        id: 1,
+        name: "홍길동",
+        character: "집요한 형사",
+        profileUrl:
+          "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?q=80&w=800&auto=format&fit=crop",
+      },
+      {
+        id: 2,
+        name: "김영희",
+        character: "천재 해커",
+        profileUrl:
+          "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?q=80&w=800&auto=format&fit=crop",
+      },
+    ],
   },
   {
     id: 2,
@@ -32,6 +59,18 @@ const DEMO_MOVIES: Movie[] = [
     genres: ["comedy"],
     posterUrl:
       "https://images.unsplash.com/photo-1485846234645-a62644f84728?q=80&w=800&auto=format&fit=crop",
+    overview: "실패투성이 연구원들이 만드는 대환장 코미디.",
+    releaseDate: "2019-03-10",
+    status: "Released",
+    budget: 25000000,
+    revenue: 95000000,
+    runtimeMinutes: 108,
+    trailerKey: "ScMzIvxBSi4",
+    trailerSite: "YouTube",
+    cast: [
+      { id: 3, name: "이코미디", character: "연구소 소장" },
+      { id: 4, name: "박유머", character: "신입 연구원" },
+    ],
   },
   {
     id: 3,
@@ -40,6 +79,12 @@ const DEMO_MOVIES: Movie[] = [
     genres: ["drama"],
     posterUrl:
       "https://images.unsplash.com/photo-1517602302552-471fe67acf66?q=80&w=800&auto=format&fit=crop",
+    overview: "헤어진 연인과의 시간을 회상하는 감성 드라마.",
+    releaseDate: "2021-11-02",
+    status: "Released",
+    budget: 15000000,
+    revenue: 60000000,
+    runtimeMinutes: 115,
   },
   {
     id: 4,
@@ -48,6 +93,12 @@ const DEMO_MOVIES: Movie[] = [
     genres: ["romance", "drama"],
     posterUrl:
       "https://images.unsplash.com/photo-1529634892667-3c0b5b1c5c48?q=80&w=800&auto=format&fit=crop",
+    overview: "서로 다른 도시에서 살아가는 두 사람의 로맨스.",
+    releaseDate: "2018-05-22",
+    status: "Released",
+    budget: 30000000,
+    revenue: 120000000,
+    runtimeMinutes: 102,
   },
   {
     id: 5,
@@ -56,6 +107,12 @@ const DEMO_MOVIES: Movie[] = [
     genres: ["sf", "drama"],
     posterUrl:
       "https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?q=80&w=800&auto=format&fit=crop",
+    overview: "인류 마지막 우주 탐사선을 타고 떠나는 이들의 이야기.",
+    releaseDate: "2023-01-10",
+    status: "Released",
+    budget: 120000000,
+    revenue: 380000000,
+    runtimeMinutes: 136,
   },
   {
     id: 6,
@@ -64,87 +121,204 @@ const DEMO_MOVIES: Movie[] = [
     genres: ["action", "comedy"],
     posterUrl:
       "https://images.unsplash.com/photo-1524985069026-dd778a71c7b4?q=80&w=800&auto=format&fit=crop",
+    overview: "탐정과 코미디언이 함께 사건을 해결하는 액션 코미디.",
+    releaseDate: "2017-09-01",
+    status: "Released",
+    budget: 40000000,
+    revenue: 160000000,
+    runtimeMinutes: 110,
   },
 ];
 
-type Step = "login" | "genres" | "movies";
-
-function App() {
-  const [step, setStep] = useState<Step>("login");
+const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
 
-  // 로그인 시 호출
+  const [showLogin, setShowLogin] = useState(false);
+  const [showSignup, setShowSignup] = useState(false);
+  const [showGenres, setShowGenres] = useState(false);
+
+  // 영화 상세 모달용
+  const [activeMovie, setActiveMovie] = useState<Movie | null>(null);
+
+  // ✅ 영화 정보 모달이 열려 있을 때는 body 스크롤 잠그기
+  useEffect(() => {
+    if (activeMovie) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+  }, [activeMovie]);
+
+
+  // 리뷰 데이터 (간단히 메모리/프론트 상태로 관리)
+  const [reviewsByMovie, setReviewsByMovie] = useState<Record<number, Review[]>>(
+    {}
+  );
+
+  const modalOpen =
+    showLogin || showSignup || showGenres || activeMovie !== null;
+
+  // 로그인 / 회원가입 성공 시 공통 처리
   function handleLogin(name: string, email: string, password: string): void {
     const newUser: User = { name, email };
     setUser(newUser);
 
-    // 이전에 이 이메일로 선호 장르를 저장한 적이 있는지 확인
+    // 저장된 선호 장르 불러오기
     try {
       const raw = localStorage.getItem(`preferredGenres:${email}`);
       if (raw) {
         const saved = JSON.parse(raw) as unknown;
         if (Array.isArray(saved) && saved.every((s) => typeof s === "string")) {
-          const genres = saved as string[];
-          if (genres.length > 0) {
-            setSelectedGenres(genres);
-            setStep("movies"); // 이미 선호 장르 있음 → 바로 영화 리스트
-            return;
-          }
+          setSelectedGenres(saved as string[]);
         }
       }
     } catch {
-      // localStorage 에러 시에는 그냥 장르 선택 화면으로
+      // 실패해도 무시
     }
 
-    // 저장된 선호 장르 없으면 → 장르 선택 화면
-    setStep("genres");
+    setShowLogin(false);
+    setShowSignup(false);
   }
 
-  // 선호 장르 선택 완료 시 호출
+  // 선호 장르 저장
   function handleSaveGenres(): void {
-    if (!user) return;
-    try {
-      localStorage.setItem(
-        `preferredGenres:${user.email}`,
-        JSON.stringify(selectedGenres)
-      );
-    } catch {
-      // 저장 실패해도 흐름은 계속 진행
+    if (user) {
+      try {
+        localStorage.setItem(
+          `preferredGenres:${user.email}`,
+          JSON.stringify(selectedGenres)
+        );
+      } catch {
+        // 실패해도 무시
+      }
     }
-    setStep("movies");
+    setShowGenres(false);
   }
 
-  // 영화 리스트에서 "처음부터 다시 선택"
-  function handleRestart(): void {
-    setStep("genres");
+  // 로그아웃
+  function handleLogout(): void {
+    setUser(null);
+    setSelectedGenres([]);
   }
 
-  if (step === "login" || !user) {
-    return <LoginScreen onLogin={handleLogin} />;
+  // 장르 선택 클릭
+  function openGenreSelection() {
+    if (!user) {
+      setShowLogin(true);
+      return;
+    }
+    setShowGenres(true);
   }
 
-  if (step === "genres") {
-    return (
-      <GenreScreen
-        user={user}
-        genres={DEMO_GENRES}
-        selected={selectedGenres}
-        onChangeSelected={setSelectedGenres}
-        onNext={handleSaveGenres}
-      />
-    );
+  // 영화 카드 클릭 → 상세 모달 열기
+  function handleOpenMovie(movie: Movie) {
+    setActiveMovie(movie);
+  }
+
+  function handleCloseMovie() {
+    setActiveMovie(null);
+  }
+
+  // ✅ 리뷰 추가: 로그인한 유저의 이름으로만 작성
+  function handleAddReview(
+    movieId: number,
+    input: { rating: number; content: string }
+  ) {
+    if (!user) {
+      alert("리뷰를 작성하려면 로그인이 필요합니다.");
+      return;
+    }
+
+    const now = new Date();
+    const newReview: Review = {
+      id: now.getTime(),
+      movieId,
+      userName: user.name,           // 회원가입 때 적은 이름 사용
+      rating: input.rating,
+      content: input.content,
+      createdAt: now.toISOString(),
+    };
+
+    setReviewsByMovie((prev) => ({
+      ...prev,
+      [movieId]: [...(prev[movieId] ?? []), newReview],
+    }));
   }
 
   return (
-    <MovieScreen
-      user={user}
-      genres={DEMO_GENRES}
-      selectedGenres={selectedGenres}
-      movies={DEMO_MOVIES}
-      onRestart={handleRestart}
-    />
+    <div className="app-root">
+      {/* 흐릿해질 메인 영역 */}
+      <div
+        className={
+          modalOpen
+            ? "app-blur-wrapper app-blur-wrapper--blurred"
+            : "app-blur-wrapper"
+        }
+      >
+        <MovieScreen
+          user={user}
+          genres={DEMO_GENRES}
+          selectedGenres={selectedGenres}
+          movies={DEMO_MOVIES}
+          onOpenLogin={() => setShowLogin(true)}
+          onOpenGenres={openGenreSelection}
+          onLogout={handleLogout}
+          onOpenMovie={handleOpenMovie}
+        />
+      </div>
+
+      {/* 어두운 배경 + 블러 */}
+      {modalOpen && <div className="modal-backdrop" />}
+
+      {/* 로그인 모달 */}
+      {showLogin && (
+        <LoginScreen
+          onLogin={handleLogin}
+          onClose={() => setShowLogin(false)}
+          onGoSignup={() => {
+            setShowLogin(false);
+            setShowSignup(true);
+          }}
+        />
+      )}
+
+      {/* 회원가입 모달 */}
+      {showSignup && (
+        <SignupScreen
+          onSignup={handleLogin}
+          onClose={() => setShowSignup(false)}
+          onGoLogin={() => {
+            setShowSignup(false);
+            setShowLogin(true);
+          }}
+        />
+      )}
+
+      {/* 선호 장르 선택 모달 (로그인 상태에서만) */}
+      {showGenres && user && (
+        <GenreScreen
+          user={user}
+          genres={DEMO_GENRES}
+          selected={selectedGenres}
+          onChangeSelected={setSelectedGenres}
+          onNext={handleSaveGenres}
+          onClose={() => setShowGenres(false)}
+        />
+      )}
+
+      {/* 영화 상세 모달 */}
+      {activeMovie && (
+        <MovieDetailModal
+          movie={activeMovie}
+          reviews={reviewsByMovie[activeMovie.id] ?? []}
+          user={user}
+          onClose={handleCloseMovie}
+          onAddReview={(input) => handleAddReview(activeMovie.id, input)}
+        />
+      )}
+    </div>
   );
-}
+};
 
 export default App;
