@@ -7,10 +7,10 @@ type MovieDetailModalProps = {
     movie: Movie;
     reviews: Review[];
     user: User | null;
-    isLiked: boolean;
-    onToggleLike: () => void;
+    liked: boolean;
     onClose: () => void;
     onAddReview: (input: { rating: number; content: string }) => void;
+    onToggleLike: () => void;
 };
 
 function formatCurrency(amount?: number): string {
@@ -51,10 +51,10 @@ const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
     movie,
     reviews,
     user,
-    isLiked,
-    onToggleLike,
+    liked,
     onClose,
     onAddReview,
+    onToggleLike,
 }) => {
     const [showTrailer, setShowTrailer] = useState(false);
     const [rating, setRating] = useState<number>(8);
@@ -82,23 +82,23 @@ const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
         <div className="modal">
             <div className="card card--glass modal-card movie-detail">
                 <div className="movie-detail__header">
-                    <h1 className="movie-detail__title">
-                        {movie.title}{" "}
-                        <span className="movie-detail__year">({movie.year})</span>
-                    </h1>
+                    <div>
+                        <h1 className="movie-detail__title">
+                            {movie.title}{" "}
+                            <span className="movie-detail__year">({movie.year})</span>
+                        </h1>
+                    </div>
                     <div className="movie-detail__header-actions">
                         <button
                             type="button"
                             className={
-                                "like-button btn--sm" +
-                                (isLiked ? " like-button--active" : "")
+                                liked
+                                    ? "like-button like-button--active"
+                                    : "like-button"
                             }
                             onClick={onToggleLike}
                         >
-                            <span className="like-button__icon">
-                                {isLiked ? "♥" : "♡"}
-                            </span>
-                            <span>좋아요</span>
+                            {liked ? "♥ 좋아요" : "♡ 좋아요"}
                         </button>
                         <button
                             type="button"
@@ -229,9 +229,7 @@ const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
                                                     ★ {r.rating}/10
                                                 </span>
                                             </div>
-                                            <p className="review-item__content">
-                                                {r.content}
-                                            </p>
+                                            <p className="review-item__content">{r.content}</p>
                                         </div>
                                     ))}
                                 </div>

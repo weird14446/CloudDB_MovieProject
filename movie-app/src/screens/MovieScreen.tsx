@@ -8,16 +8,12 @@ type MovieScreenProps = {
     genres: Genre[];
     selectedGenres: string[];
     movies: Movie[];
-
-    // ✅ 좋아요 상태 관련
-    likedMovieIds: number[];
-    isLiked: (movieId: number) => boolean;
-    onToggleLike: (movie: Movie) => void;
-
     onOpenLogin: () => void;
     onOpenGenres: () => void;
     onLogout: () => void;
     onOpenMovie: (movie: Movie) => void;
+    // ✅ 평균 평점 맵 (movieId → 평균값)
+    averageRatings?: Record<number, number | undefined>;
 };
 
 const MovieScreen: React.FC<MovieScreenProps> = ({
@@ -25,19 +21,17 @@ const MovieScreen: React.FC<MovieScreenProps> = ({
     genres,
     selectedGenres,
     movies,
-    likedMovieIds,
-    isLiked,
-    onToggleLike,
     onOpenLogin,
     onOpenGenres,
     onLogout,
     onOpenMovie,
+    averageRatings,
 }) => {
     // 🔎 검색어 상태
     const [searchQuery, setSearchQuery] = useState<string>("");
 
-    // 👀 보기 모드: 전체 / 좋아요한 영화
-    const [viewMode, setViewMode] = useState<"all" | "liked">("all");
+    // ❤️ 좋아요 상태 (프론트에서만 관리)
+    const [likedIds, setLikedIds] = useState<number[]>([]);
 
     // 1) 선호 장르를 기준으로 우선 정렬
     const sortedMovies = useMemo(() => {
@@ -64,28 +58,18 @@ const MovieScreen: React.FC<MovieScreenProps> = ({
         });
     }, [movies, selectedGenres]);
 
-    // 2) 보기 모드 + 검색 적용
+    // 2) 정렬된 리스트에 검색 필터 적용
     const visibleMovies = useMemo(() => {
         const q = searchQuery.trim().toLowerCase();
+        if (!q) return sortedMovies;
 
-        // (1) 기본 정렬된 리스트
-        let base = sortedMovies;
-
-        // (2) 좋아요 탭이면, 좋아요한 영화만
-        if (viewMode === "liked") {
-            base = base.filter((m) => isLiked(m.id));
-        }
-
-        // (3) 검색어 필터
-        if (!q) return base;
-
-        return base.filter((m) => {
+        return sortedMovies.filter((m) => {
             const inTitle = m.title.toLowerCase().includes(q);
             const inGenres = m.genres.some((g) => g.toLowerCase().includes(q));
             const inYear = m.year.toString().includes(q);
             return inTitle || inGenres || inYear;
         });
-    }, [sortedMovies, searchQuery, viewMode, isLiked]);
+    }, [sortedMovies, searchQuery]);
 
     const labelSelected =
         selectedGenres.length > 0
@@ -94,12 +78,30 @@ const MovieScreen: React.FC<MovieScreenProps> = ({
                 .join(", ")
             : "전체";
 
-    const likedCount = likedMovieIds.length;
+    // ❤️ 좋아요 클릭
+    function handleClickLike(
+        movie: Movie,
+        e: React.MouseEvent<HTMLButtonElement>
+    ) {
+        e.stopPropagation(); // 카드 클릭(상세 모달) 막기
+
+        if (!user) {
+            alert("로그인 후 좋아요를 사용할 수 있습니다.");
+            onOpenLogin();
+            return;
+        }
+
+        setLikedIds((prev) =>
+            prev.includes(movie.id)
+                ? prev.filter((id) => id !== movie.id)
+                : [...prev, movie.id]
+        );
+    }
 
     return (
         <div className="app app--dark">
             <main className="movie-main">
-                {/* ✅ 상단 고정 영역(로고 + 로그인/로그아웃 + 검색/선호 장르) */}
+                {/* ✅ 상단 고정 영역 */}
                 <div className="movie-main__sticky">
                     {/* 상단 바: 로고 + 우측 액션 */}
                     <header className="movie-main__top">
@@ -147,13 +149,12 @@ const MovieScreen: React.FC<MovieScreenProps> = ({
                         </div>
                     </header>
 
-                    {/* 선택한 장르 + 검색 + 개수 + 보기모드 */}
+                    {/* 선택한 장르 + 검색 + 개수 */}
                     <div className="movie-main__header">
                         <div>
                             <div className="badge">Movies</div>
                             <h2 className="card-title">
-                                선택한 장르:{" "}
-                                <span className="accent">{labelSelected}</span>
+                                선택한 장르: <span className="accent">{labelSelected}</span>
                             </h2>
                             <p className="card-subtitle">
                                 선호 장르를 설정하면 관련도가 높은 영화가 위에 정렬됩니다.
@@ -161,54 +162,10 @@ const MovieScreen: React.FC<MovieScreenProps> = ({
                             </p>
                         </div>
 
-                        {/* 오른쪽: 총 개수 + 검색창 + 좋아요 정보 */}
                         <div className="movie-main__header-right">
-                            <div className="movie-main__view-bar">
-                                <div className="pill pill--outline">
-                                    총 <strong>{visibleMovies.length}</strong> 편
-                                </div>
-
-                                {/* ✅ 좋아요한 영화 수 표시 */}
-                                <div className="pill pill--soft movie-main__likes-pill">
-                                    <span>♥ 좋아요</span>
-                                    <strong>{likedCount}</strong>
-                                    <span>편</span>
-                                </div>
+                            <div className="pill pill--outline">
+                                총 <strong>{visibleMovies.length}</strong> 편
                             </div>
-
-                            {/* 보기 모드 탭: 전체 / 좋아요한 영화 */}
-                            <div className="movie-main__view-tabs">
-                                <button
-                                    type="button"
-                                    className={
-                                        "view-tab" +
-                                        (viewMode === "all" ? " view-tab--active" : "")
-                                    }
-                                    onClick={() => setViewMode("all")}
-                                >
-                                    전체
-                                </button>
-                                <button
-                                    type="button"
-                                    className={
-                                        "view-tab" +
-                                        (viewMode === "liked" ? " view-tab--active" : "")
-                                    }
-                                    onClick={() => setViewMode("liked")}
-                                    disabled={!user || likedCount === 0}
-                                    title={
-                                        !user
-                                            ? "로그인하면 좋아요한 영화만 볼 수 있어요."
-                                            : likedCount === 0
-                                                ? "좋아요한 영화가 아직 없습니다."
-                                                : "좋아요한 영화만 보기"
-                                    }
-                                >
-                                    좋아요한 영화
-                                </button>
-                            </div>
-
-                            {/* 검색창 */}
                             <input
                                 className="form-input movie-main__search"
                                 placeholder="제목 / 장르 / 연도 검색"
@@ -219,54 +176,71 @@ const MovieScreen: React.FC<MovieScreenProps> = ({
                     </div>
                 </div>
 
-                {/* ✅ 정렬 + 검색 + 보기모드가 적용된 영화 리스트 (스크롤 영역) */}
+                {/* ✅ 영화 그리드 */}
                 <section className="movie-grid">
-                    {visibleMovies.map((m) => (
-                        <article
-                            key={m.id}
-                            className="movie-card movie-card--compact"
-                        >
-                            <button
-                                type="button"
-                                className="movie-card__clickable"
-                                onClick={() => onOpenMovie(m)}
-                            >
-                                <div className="movie-card__poster">
-                                    {m.posterUrl ? (
-                                        <img src={m.posterUrl} alt={m.title} />
-                                    ) : (
-                                        <div className="movie-card__noimg">No Image</div>
-                                    )}
-                                </div>
-                                <div className="movie-card__body">
-                                    <h3 className="movie-card__title">{m.title}</h3>
-                                    <p className="movie-card__year">{m.year}</p>
-                                    <div className="movie-card__genres">
-                                        {m.genres.map((g) => (
-                                            <span key={g} className="pill pill--soft">
-                                                {g.toUpperCase()}
-                                            </span>
-                                        ))}
-                                    </div>
-                                </div>
-                            </button>
+                    {visibleMovies.map((m) => {
+                        const liked = likedIds.includes(m.id);
+                        const avg = averageRatings?.[m.id];
+                        const avgLabel =
+                            avg != null && !Number.isNaN(avg) ? avg.toFixed(1) : "–";
 
-                            {/* ✅ 카드 하단에 개별 좋아요 버튼 (원래 구현해둔 것과 비슷하게 쓸 수 있음) */}
-                            <div style={{ padding: "0.4rem 0.5rem 0.6rem" }}>
+                        return (
+                            <article
+                                key={m.id}
+                                className="movie-card movie-card--compact"
+                            >
+                                {/* 평점(왼쪽 위) */}
+                                <div className="movie-card__rating-badge">
+                                    ★ {avgLabel}
+                                </div>
+
+                                {/* 하트(오른쪽 위) */}
                                 <button
                                     type="button"
-                                    className="btn btn--ghost btn--sm"
-                                    onClick={() => onToggleLike(m)}
+                                    className={
+                                        "movie-card__like" +
+                                        (liked ? " movie-card__like--active" : "")
+                                    }
+                                    onClick={(e) => handleClickLike(m, e)}
+                                    aria-label={
+                                        liked ? "좋아요 취소" : "이 영화를 좋아요로 표시"
+                                    }
                                 >
-                                    {isLiked(m.id) ? "♥ 좋아요 취소" : "♡ 좋아요"}
+                                    {liked ? "♥" : "♡"}
                                 </button>
-                            </div>
-                        </article>
-                    ))}
+
+                                {/* 카드 전체 클릭 → 상세 모달 */}
+                                <button
+                                    type="button"
+                                    className="movie-card__clickable"
+                                    onClick={() => onOpenMovie(m)}
+                                >
+                                    <div className="movie-card__poster">
+                                        {m.posterUrl ? (
+                                            <img src={m.posterUrl} alt={m.title} />
+                                        ) : (
+                                            <div className="movie-card__noimg">No Image</div>
+                                        )}
+                                    </div>
+                                    <div className="movie-card__body">
+                                        <h3 className="movie-card__title">{m.title}</h3>
+                                        <p className="movie-card__year">{m.year}</p>
+                                        <div className="movie-card__genres">
+                                            {m.genres.map((g) => (
+                                                <span key={g} className="pill pill--soft">
+                                                    {g.toUpperCase()}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </button>
+                            </article>
+                        );
+                    })}
 
                     {visibleMovies.length === 0 && (
                         <div className="movie-empty">
-                            검색 조건(또는 좋아요 필터)에 해당하는 영화가 없습니다.
+                            검색 조건에 해당하는 영화가 없습니다.
                         </div>
                     )}
                 </section>

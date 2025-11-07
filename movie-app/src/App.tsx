@@ -1,6 +1,8 @@
 // src/App.tsx
-
-import React, { useState, useEffect } from "react";
+// 기존
+// import React, { useState, useEffect } from "react";
+// 이렇게 되어 있을 텐데 ↓ 로 바꿔줘
+import React, { useState, useEffect, useMemo } from "react";
 import "./App.css";
 import LoginScreen from "./screens/LoginScreen";
 import SignupScreen from "./screens/SignupScreen";
@@ -129,33 +131,12 @@ const DEMO_MOVIES: Movie[] = [
   },
 ];
 
-const LIKES_KEY_PREFIX = "movieApp:likes:";
-
-function loadLikes(email: string | null): number[] {
-  if (!email) return [];
-  try {
-    const raw = localStorage.getItem(`${LIKES_KEY_PREFIX}${email}`);
-    if (!raw) return [];
-    const arr = JSON.parse(raw) as unknown;
-    if (!Array.isArray(arr)) return [];
-    return arr.filter((x) => typeof x === "number") as number[];
-  } catch {
-    return [];
-  }
-}
-
-function saveLikes(email: string | null, likes: number[]) {
-  if (!email) return;
-  try {
-    localStorage.setItem(`${LIKES_KEY_PREFIX}${email}`, JSON.stringify(likes));
-  } catch {
-    // 무시
-  }
-}
-
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
+
+  // ✅ 좋아요한 영화 id 목록
+  const [likedMovieIds, setLikedMovieIds] = useState<number[]>([]);
 
   const [showLogin, setShowLogin] = useState(false);
   const [showSignup, setShowSignup] = useState(false);
@@ -163,9 +144,6 @@ const App: React.FC = () => {
 
   // 영화 상세 모달용
   const [activeMovie, setActiveMovie] = useState<Movie | null>(null);
-
-  // 좋아요 상태
-  const [likedMovieIds, setLikedMovieIds] = useState<number[]>([]);
 
   // ✅ 영화 정보 모달이 열려 있을 때는 body 스크롤 잠그기
   useEffect(() => {
@@ -177,34 +155,54 @@ const App: React.FC = () => {
   }, [activeMovie]);
 
   // 리뷰 데이터 (간단히 메모리/프론트 상태로 관리)
+  // 리뷰 데이터 (간단히 메모리/프론트 상태로 관리)
   const [reviewsByMovie, setReviewsByMovie] = useState<Record<number, Review[]>>(
     {}
   );
 
+  // ✅ 영화별 평균 평점 계산 (MovieScreen에 내려줌)
+  const averageRatings = useMemo(() => {
+    const result: Record<number, number> = {};
+    for (const [movieIdStr, reviews] of Object.entries(reviewsByMovie)) {
+      if (!reviews.length) continue;
+      const sum = reviews.reduce((acc, r) => acc + r.rating, 0);
+      result[Number(movieIdStr)] = sum / reviews.length;
+    }
+    return result;
+  }, [reviewsByMovie]);
+
+
   const modalOpen =
     showLogin || showSignup || showGenres || activeMovie !== null;
 
-  // 로그인 / 회원가입 공통 처리
+  // 로그인 / 회원가입 성공 시 공통 처리
   function handleLogin(name: string, email: string, password: string): void {
     const newUser: User = { name, email };
     setUser(newUser);
 
-    // 선호 장르 로드
+    // 저장된 선호 장르 / 좋아요 영화 불러오기
     try {
-      const raw = localStorage.getItem(`preferredGenres:${email}`);
-      if (raw) {
-        const saved = JSON.parse(raw) as unknown;
+      const rawGenres = localStorage.getItem(`preferredGenres:${email}`);
+      if (rawGenres) {
+        const saved = JSON.parse(rawGenres) as unknown;
         if (Array.isArray(saved) && saved.every((s) => typeof s === "string")) {
           setSelectedGenres(saved as string[]);
         }
       }
-    } catch {
-      // 무시
-    }
 
-    // ✅ 로그인 시, 해당 유저의 좋아요 목록 로드
-    const likes = loadLikes(email);
-    setLikedMovieIds(likes);
+      const rawLikes = localStorage.getItem(`likedMovies:${email}`);
+      if (rawLikes) {
+        const savedLikes = JSON.parse(rawLikes) as unknown;
+        if (
+          Array.isArray(savedLikes) &&
+          savedLikes.every((id) => typeof id === "number")
+        ) {
+          setLikedMovieIds(savedLikes as number[]);
+        }
+      }
+    } catch {
+      // 실패해도 무시
+    }
 
     setShowLogin(false);
     setShowSignup(false);
@@ -223,6 +221,29 @@ const App: React.FC = () => {
       }
     }
     setShowGenres(false);
+  }
+
+  // ✅ 좋아요 토글
+  function toggleLike(movieId: number): void {
+    setLikedMovieIds((prev) => {
+      const exists = prev.includes(movieId);
+      const next = exists
+        ? prev.filter((id) => id !== movieId)
+        : [...prev, movieId];
+
+      if (user) {
+        try {
+          localStorage.setItem(
+            `likedMovies:${user.email}`,
+            JSON.stringify(next)
+          );
+        } catch {
+          // 실패해도 무시
+        }
+      }
+
+      return next;
+    });
   }
 
   // 로그아웃
@@ -276,24 +297,6 @@ const App: React.FC = () => {
     }));
   }
 
-  // ✅ 좋아요 토글
-  function handleToggleLike(movie: Movie) {
-    if (!user) {
-      alert("좋아요 기능은 로그인 후 이용할 수 있습니다.");
-      return;
-    }
-
-    setLikedMovieIds((prev) => {
-      const exists = prev.includes(movie.id);
-      const next = exists
-        ? prev.filter((id) => id !== movie.id)
-        : [...prev, movie.id];
-
-      saveLikes(user.email, next);
-      return next;
-    });
-  }
-
   return (
     <div className="app-root">
       {/* 흐릿해질 메인 영역 */}
@@ -314,8 +317,8 @@ const App: React.FC = () => {
           onOpenGenres={openGenreSelection}
           onLogout={handleLogout}
           onOpenMovie={handleOpenMovie}
-          isLiked={(movieId) => likedMovieIds.includes(movieId)}
-          onToggleLike={handleToggleLike}
+          averageRatings={averageRatings}   // ✅ 추가
+          onToggleLike={toggleLike}
         />
       </div>
 
@@ -364,10 +367,10 @@ const App: React.FC = () => {
           movie={activeMovie}
           reviews={reviewsByMovie[activeMovie.id] ?? []}
           user={user}
+          liked={likedMovieIds.includes(activeMovie.id)}
           onClose={handleCloseMovie}
           onAddReview={(input) => handleAddReview(activeMovie.id, input)}
-          isLiked={user ? likedMovieIds.includes(activeMovie.id) : false}
-          onToggleLike={() => handleToggleLike(activeMovie)}
+          onToggleLike={() => toggleLike(activeMovie.id)}
         />
       )}
     </div>
