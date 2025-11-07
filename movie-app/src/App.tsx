@@ -16,24 +16,18 @@ import {
     createMovie as createAdminMovie,
     updateMovie as updateAdminMovie,
     deleteMovie as deleteAdminMovie,
+    refreshExistingMovies,
 } from "./api/adminService";
 import type { AdminMovieInput } from "./api/adminService";
 import { createReview } from "./api/reviewService";
 import { fetchLikes, toggleLike } from "./api/likeService";
+import {
+    fetchPreferredGenres,
+    savePreferredGenres,
+} from "./api/preferenceService";
+import { reportReview } from "./api/reportService";
 
 type ReviewsByMovie = Record<number, Review[]>;
-
-function loadPreferredGenres(email: string): string[] {
-    try {
-        const raw = localStorage.getItem(`preferredGenres:${email}`);
-        if (!raw) return [];
-        const parsed = JSON.parse(raw);
-        if (!Array.isArray(parsed)) return [];
-        return parsed.filter((slug): slug is string => typeof slug === "string");
-    } catch {
-        return [];
-    }
-}
 
 const DEV_EMAIL = "root@dev.local";
 
@@ -65,6 +59,7 @@ const App: React.FC = () => {
     const [creatingMovie, setCreatingMovie] = useState<boolean>(false);
     const [updatingMovie, setUpdatingMovie] = useState<boolean>(false);
     const [deletingMovie, setDeletingMovie] = useState<boolean>(false);
+    const [refreshingMovies, setRefreshingMovies] = useState<boolean>(false);
 
     const modalOpen =
         showLogin || showSignup || showGenres || activeMovie !== null;
@@ -97,6 +92,23 @@ const App: React.FC = () => {
             });
     }, []);
 
+    const loadPreferredGenresFromServer = useCallback(
+        async (userId?: number | null) => {
+            if (!userId) return;
+            try {
+                const response = await fetchPreferredGenres(userId);
+                if (response.ok && Array.isArray(response.genres)) {
+                    setSelectedGenres(response.genres);
+                } else if (response.message) {
+                    console.warn("[Preferences] load failed:", response.message);
+                }
+            } catch (error) {
+                console.warn("[Preferences] load error", error);
+            }
+        },
+        []
+    );
+
     const loadInitialData = useCallback(async () => {
         setDataLoading(true);
         setDataError(null);
@@ -119,6 +131,14 @@ const App: React.FC = () => {
     useEffect(() => {
         loadInitialData();
     }, [loadInitialData]);
+
+    useEffect(() => {
+        if (user?.id) {
+            void loadPreferredGenresFromServer(user.id);
+        } else {
+            setSelectedGenres([]);
+        }
+    }, [user?.id, loadPreferredGenresFromServer]);
 
     useEffect(() => {
         if (!genres.length) return;
@@ -156,34 +176,37 @@ const App: React.FC = () => {
             id: payload.userId,
         };
         setUser(nextUser);
-
-        const savedGenres = loadPreferredGenres(payload.email);
-        if (savedGenres.length) {
-            setSelectedGenres(savedGenres);
-        }
+        void loadPreferredGenresFromServer(payload.userId);
 
         setShowLogin(false);
         setShowSignup(false);
     }
 
     function handleSaveGenres(): void {
-        if (user?.email) {
-            try {
-                localStorage.setItem(
-                    `preferredGenres:${user.email}`,
-                    JSON.stringify(selectedGenres)
-                );
-            } catch {
-                // ignore
-            }
+        if (!user?.id) {
+            setShowGenres(false);
+            return;
         }
-        setShowGenres(false);
+        void (async () => {
+            try {
+                const response = await savePreferredGenres(user.id!, selectedGenres);
+                if (!response.ok) {
+                    alert(response.message ?? "선호 장르를 저장하지 못했습니다.");
+                    return;
+                }
+                setShowGenres(false);
+            } catch (error) {
+                console.error("[Preferences] save error", error);
+                alert("선호 장르를 저장하지 못했습니다.");
+            }
+        })();
     }
 
     function handleLogout(): void {
         setUser(null);
         setSelectedGenres([]);
         setLikedMovieIds([]);
+        window.location.reload();
     }
 
     function openGenreSelection(): void {
@@ -282,8 +305,12 @@ const App: React.FC = () => {
         })();
     }
 
-    function handleReportReview(movieId: number, reviewId: number): void {
-        if (!user) {
+    function handleReportReview(
+        movieId: number,
+        reviewId: number,
+        reason: string
+    ): void {
+        if (!user?.id) {
             alert("리뷰 신고는 로그인 후 이용 가능합니다.");
             return;
         }
@@ -291,19 +318,50 @@ const App: React.FC = () => {
         const alreadyReported =
             reportedReviewsByMovie[movieId]?.includes(reviewId);
         if (alreadyReported) {
-            alert("이미 신고된 리뷰입니다.");
+            alert("이미 신고한 리뷰입니다.");
             return;
         }
 
-        setReportedReviewsByMovie((prev) => {
-            const current = prev[movieId] ?? [];
-            return {
-                ...prev,
-                [movieId]: [...current, reviewId],
-            };
-        });
-
-        alert("신고가 접수되었습니다. 검토 후 조치하겠습니다.");
+        void (async () => {
+            try {
+                const response = await reportReview({
+                    reviewId,
+                    userId: user.id!,
+                    reason,
+                });
+                if (!response.ok) {
+                    alert(response.message ?? "리뷰를 신고하지 못했습니다.");
+                    if (response.message?.includes("이미 신고한 리뷰입니다.")) {
+                        setReportedReviewsByMovie((prev) => {
+                            const current = prev[movieId] ?? [];
+                            if (current.includes(reviewId)) {
+                                return prev;
+                            }
+                            return {
+                                ...prev,
+                                [movieId]: [...current, reviewId],
+                            };
+                        });
+                    }
+                    return;
+                }
+                setReportedReviewsByMovie((prev) => {
+                    const current = prev[movieId] ?? [];
+                    return {
+                        ...prev,
+                        [movieId]: [...current, reviewId],
+                    };
+                });
+                alert("신고가 접수되었습니다. 검토 후 조치하겠습니다.");
+            } catch (error) {
+                console.error("[Review] report error", error);
+                const message =
+                    error instanceof Error && error.message.includes("이미")
+                        ? "이미 신고한 리뷰입니다."
+                        : "리뷰를 신고하지 못했습니다.";
+                alert(message);
+            }
+        })();
     }
 
     const handleFetchAndStore = useCallback(async () => {
@@ -484,6 +542,30 @@ const App: React.FC = () => {
         [isDevUser, activeMovie]
     );
 
+    const handleRefreshExistingMovies = useCallback(async () => {
+        if (!isDevUser) return;
+        setRefreshingMovies(true);
+        try {
+            const result = await refreshExistingMovies();
+            if (!result.ok) {
+                alert(result.message ?? "영화 정보를 업데이트하지 못했습니다.");
+                return;
+            }
+            alert(
+                `업데이트 완료 (성공 ${result.updated ?? 0}건, 실패 ${result.failed ?? 0}건)`
+            );
+            await loadInitialData();
+        } catch (error) {
+            alert(
+                error instanceof Error
+                    ? `영화 업데이트 중 오류: ${error.message}`
+                    : "영화 정보를 업데이트하지 못했습니다."
+            );
+        } finally {
+            setRefreshingMovies(false);
+        }
+    }, [isDevUser, loadInitialData]);
+
     return (
         <div className="app-root">
             <div
@@ -519,6 +601,8 @@ const App: React.FC = () => {
                     isCreatingMovie={creatingMovie}
                     isUpdatingMovie={updatingMovie}
                     isDeletingMovie={deletingMovie}
+                    onRefreshMovies={handleRefreshExistingMovies}
+                    isRefreshingMovies={refreshingMovies}
                 />
             </div>
 
@@ -567,8 +651,8 @@ const App: React.FC = () => {
                     onClose={handleCloseMovie}
                     onAddReview={(input) => handleAddReview(activeMovie.id, input)}
                     reportedReviewIds={reportedReviewsByMovie[activeMovie.id] ?? []}
-                    onReportReview={(reviewId) =>
-                        handleReportReview(activeMovie.id, reviewId)
+                    onReportReview={(reviewId, reason) =>
+                        handleReportReview(activeMovie.id, reviewId, reason)
                     }
                 />
             )}

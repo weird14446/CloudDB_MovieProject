@@ -38,6 +38,8 @@ type MovieScreenProps = {
     isCreatingMovie: boolean;
     isUpdatingMovie: boolean;
     isDeletingMovie: boolean;
+    onRefreshMovies: () => Promise<void>;
+    isRefreshingMovies: boolean;
 };
 
 const STATUS_OPTIONS: { value: string; label: string }[] = [
@@ -102,6 +104,8 @@ const MovieScreen: React.FC<MovieScreenProps> = ({
     isCreatingMovie,
     isUpdatingMovie,
     isDeletingMovie,
+    onRefreshMovies,
+    isRefreshingMovies,
 }) => {
     // 🔎 검색어
     const [searchQuery, setSearchQuery] = useState<string>("");
@@ -433,6 +437,18 @@ const MovieScreen: React.FC<MovieScreenProps> = ({
                                         disabled={isClearingData || isImportingData}
                                     >
                                         {isClearingData ? "데이터 비우는 중..." : "데이터 비우기"}
+                                    </button>
+                                    <button
+                                        className="btn btn--ghost btn--sm"
+                                        style={{ minWidth: 140 }}
+                                        onClick={() => void onRefreshMovies()}
+                                        disabled={
+                                            isRefreshingMovies ||
+                                            isImportingData ||
+                                            isClearingData
+                                        }
+                                    >
+                                        {isRefreshingMovies ? "정보 업데이트 중..." : "기존 영화 업데이트"}
                                     </button>
                                 </div>
                             )}

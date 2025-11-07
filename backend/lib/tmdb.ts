@@ -1,7 +1,8 @@
-import type { Movie } from "./types";
+import type { Movie, CastMember } from "./types";
 
 const TMDB_API_BASE = "https://api.themoviedb.org/3";
 const TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w500";
+const TMDB_PROFILE_BASE = "https://image.tmdb.org/t/p/w300";
 const DEFAULT_LANGUAGE = "ko-KR";
 
 function ensureApiKey(): string {
@@ -51,11 +52,19 @@ type GenreResponse = {
 };
 
 type MovieDetailResponse = {
+    id: number;
+    title?: string;
+    original_title?: string;
+    overview?: string;
     release_date?: string;
     runtime: number | null;
     status: string | null;
     budget: number | null;
     revenue: number | null;
+    vote_average?: number | null;
+    vote_count?: number | null;
+    poster_path?: string | null;
+    genres?: Array<{ id: number; name: string }>;
     release_dates?: {
         results?: Array<{
             iso_3166_1?: string;
@@ -74,6 +83,13 @@ type MovieDetailResponse = {
     };
     credits?: {
         crew?: Array<{ job?: string; name?: string }>;
+        cast?: Array<{
+            id?: number;
+            name?: string;
+            character?: string;
+            profile_path?: string | null;
+            order?: number;
+        }>;
     };
     videos?: {
         results?: Array<{
@@ -154,6 +170,22 @@ function extractTrailerKey(detail?: MovieDetailResponse):
     return undefined;
 }
 
+function extractTopCast(detail?: MovieDetailResponse, limit = 8): CastMember[] {
+    const cast = detail?.credits?.cast ?? [];
+    return cast
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+        .slice(0, limit)
+        .map((member) => ({
+            id: member.id ?? 0,
+            name: member.name ?? "이름 미상",
+            character: member.character ?? undefined,
+            profileUrl: member.profile_path
+                ? `${TMDB_PROFILE_BASE}${member.profile_path}`
+                : undefined,
+        }))
+        .filter((member) => member.name.trim().length > 0);
+}
+
 export async function fetchTmdbMoviesAndGenres(limit = 20): Promise<{
     movies: Movie[];
 }> {
@@ -210,8 +242,56 @@ export async function fetchTmdbMoviesAndGenres(limit = 20): Promise<{
             trailerSite: trailer?.site,
             trailerKey: trailer?.key,
             ageRating: certification ?? undefined,
+            cast: extractTopCast(detail),
         };
     });
 
     return { movies };
+}
+
+export async function fetchTmdbMovieById(tmdbId: number): Promise<Movie | null> {
+    try {
+        const detail = await tmdbFetch<MovieDetailResponse>(`/movie/${tmdbId}`, {
+            append_to_response: "release_dates,watch/providers,credits,videos",
+        });
+        const director = extractDirector(detail);
+        const trailer = extractTrailerKey(detail);
+        const certification = extractCertification(detail);
+        const platforms = extractPlatforms(detail);
+        const releaseDate = detail.release_date ?? undefined;
+        const year = releaseDate
+            ? Number(releaseDate.slice(0, 4))
+            : new Date().getFullYear();
+
+        return {
+            id: tmdbId,
+            tmdbId,
+            title: detail.title ?? detail.original_title ?? "제목 미상",
+            year,
+            overview: detail.overview ?? undefined,
+            posterUrl: detail.poster_path
+                ? `${TMDB_IMAGE_BASE}${detail.poster_path}`
+                : undefined,
+            releaseDate,
+            status: detail.status ?? undefined,
+            director,
+            genres: (detail.genres ?? []).map((genre) => toSlug(genre.name)),
+            avgRating:
+                typeof detail.vote_average === "number"
+                    ? Number(detail.vote_average.toFixed(1))
+                    : undefined,
+            voteCount: detail.vote_count ?? undefined,
+            streamingPlatforms: platforms,
+            runtimeMinutes: detail.runtime ?? undefined,
+            budget: detail.budget ?? undefined,
+            revenue: detail.revenue ?? undefined,
+            trailerSite: trailer?.site,
+            trailerKey: trailer?.key,
+            ageRating: certification ?? undefined,
+            cast: extractTopCast(detail),
+        };
+    } catch (error) {
+        console.error(`[tmdb] fetchTmdbMovieById(${tmdbId})`, error);
+        return null;
+    }
 }

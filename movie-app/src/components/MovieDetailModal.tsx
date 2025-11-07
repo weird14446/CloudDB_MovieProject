@@ -12,7 +12,7 @@ type MovieDetailModalProps = {
     onAddReview: (input: { rating: number; content: string }) => void;
     onToggleLike: () => void;
     reportedReviewIds: number[];
-    onReportReview: (reviewId: number) => void;
+    onReportReview: (reviewId: number, reason: string) => void;
 };
 
 function formatCurrency(amount?: number): string {
@@ -106,11 +106,16 @@ const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
             alert("이미 신고 처리된 리뷰입니다.");
             return;
         }
-        const confirmed = window.confirm(
-            "이 리뷰를 신고하시겠습니까? 부적절한 내용은 검토 후 조치됩니다."
+        const reason = window.prompt(
+            "신고 사유를 입력해주세요.\n(예: 욕설, 광고, 부적절한 내용 등)"
         );
-        if (!confirmed) return;
-        onReportReview(reviewId);
+        if (reason === null) return;
+        const trimmed = reason.trim();
+        if (!trimmed) {
+            alert("신고 사유를 입력해주세요.");
+            return;
+        }
+        onReportReview(reviewId, trimmed);
     }
 
     const streamingLabel =
@@ -377,12 +382,12 @@ const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
                     >
                         닫기
                     </button>
-                    <div className="trailer-modal__frame">
+                    <div className="trailer-modal__video">
                         <iframe
                             src={trailerSrc}
-                            title={`${movie.title} trailer`}
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                             allowFullScreen
+                            title="trailer"
                         />
                     </div>
                 </div>

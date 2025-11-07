@@ -81,6 +81,23 @@ export function deleteMovie(movieId: number): Promise<DeleteMovieResponse> {
     });
 }
 
+export function refreshExistingMovies(movieIds?: number[]) {
+    return apiRequest<{
+        ok: boolean;
+        updated?: number;
+        skipped?: number;
+        failed?: number;
+        total?: number;
+        message?: string;
+    }>("/admin/update-existing", {
+        method: "POST",
+        body: JSON.stringify(
+            movieIds && movieIds.length ? { movieIds } : {}
+        ),
+        headers: ADMIN_HEADER,
+    });
+}
+
 export function updateMovie(
     movieId: number,
     movie: AdminMovieInput

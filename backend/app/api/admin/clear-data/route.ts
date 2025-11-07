@@ -22,13 +22,11 @@ export async function POST(request: Request) {
                     "review_reports",
                     "reviews",
                     "likes",
-                    "user_director_agg",
                     "movie_streaming_platforms",
                     "movie_cast",
                     "movie_genres",
                     "movie_rating_hist",
                     "movie_rating_stats",
-                    "import_sources",
                     "movies",
                     "directors",
                 ];

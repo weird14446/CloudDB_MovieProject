@@ -182,14 +182,43 @@ async function fetchMovie(
         [movieId]
     );
 
+    const [castRows] = await conn.query<{
+        person_id: number;
+        cast_name: string;
+        character_name: string | null;
+        profile_url: string | null;
+        cast_order: number | null;
+    }[]>(
+        `
+        SELECT p.id AS person_id,
+               p.name AS cast_name,
+               mc.character_name,
+               p.profile_url,
+               mc.cast_order
+        FROM movie_cast mc
+        JOIN people p ON p.id = mc.person_id
+        WHERE mc.movie_id = ?
+        ORDER BY mc.cast_order ASC
+    `,
+        [movieId]
+    );
+
     const genresByMovie = {
         [movieId]: genreRows.map((row) => slugify(row.name)),
     };
     const platformsByMovie = {
         [movieId]: platformRows.map((row) => row.name),
     };
+    const castByMovie = {
+        [movieId]: castRows.map((row) => ({
+            id: row.person_id,
+            name: row.cast_name,
+            character: row.character_name ?? undefined,
+            profileUrl: row.profile_url ?? undefined,
+        })),
+    };
 
-    return mapMovies(movieRows, genresByMovie, platformsByMovie)[0] ?? null;
+    return mapMovies(movieRows, genresByMovie, platformsByMovie, castByMovie)[0] ?? null;
 }
 
 function buildMovieValues(

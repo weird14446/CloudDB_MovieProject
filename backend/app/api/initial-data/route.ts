@@ -1,7 +1,7 @@
 import { getPool } from "@/lib/db";
 import { mapMovies } from "@/lib/formatters";
 import { corsJson, corsEmpty } from "@/lib/cors";
-import type { Genre, Review } from "@/lib/types";
+import type { Genre, Review, CastMember } from "@/lib/types";
 
 type ReviewRow = {
   id: number;
@@ -72,6 +72,34 @@ export async function GET() {
           ).then(([rows]) => rows)
         : [];
 
+    const movieCastRows =
+      movieIds.length > 0
+        ? await pool
+            .query<{
+              movie_id: number;
+              person_id: number;
+              cast_name: string;
+              character_name: string | null;
+              profile_url: string | null;
+              cast_order: number | null;
+            }[]>(
+              `
+        SELECT mc.movie_id,
+               p.id AS person_id,
+               p.name AS cast_name,
+               mc.character_name,
+               p.profile_url,
+               mc.cast_order
+        FROM movie_cast mc
+        JOIN people p ON p.id = mc.person_id
+        WHERE mc.movie_id IN (?)
+        ORDER BY mc.movie_id ASC, mc.cast_order ASC
+      `,
+              [movieIds]
+            )
+            .then(([rows]) => rows)
+        : [];
+
     const reviewRows =
       movieIds.length > 0
         ? await pool
@@ -113,7 +141,27 @@ export async function GET() {
       {}
     );
 
-    const formattedMovies = mapMovies(movieRows, genresByMovie, platformsByMovie);
+    const castByMovie = movieCastRows.reduce<Record<number, CastMember[]>>(
+      (acc, row) => {
+        const list = acc[row.movie_id] ?? [];
+        list.push({
+          id: row.person_id,
+          name: row.cast_name,
+          character: row.character_name ?? undefined,
+          profileUrl: row.profile_url ?? undefined,
+        });
+        acc[row.movie_id] = list;
+        return acc;
+      },
+      {}
+    );
+
+    const formattedMovies = mapMovies(
+      movieRows,
+      genresByMovie,
+      platformsByMovie,
+      castByMovie
+    );
     const reviewsByMovie = reviewRows.reduce<Record<number, Review[]>>((acc, row) => {
       const list = acc[row.movie_id] ?? [];
       list.push({

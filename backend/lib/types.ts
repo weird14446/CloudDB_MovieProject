@@ -14,6 +14,7 @@ export type Movie = {
   year: number;
   genres: string[];
   director: string;
+  cast?: CastMember[];
   posterUrl?: string;
   overview?: string;
   releaseDate?: string;
@@ -27,6 +28,13 @@ export type Movie = {
   ageRating?: string;
   avgRating?: number;
   voteCount?: number;
+};
+
+export type CastMember = {
+  id: number;
+  name: string;
+  character?: string;
+  profileUrl?: string | null;
 };
 
 export type Genre = {

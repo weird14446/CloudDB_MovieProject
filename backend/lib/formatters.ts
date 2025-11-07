@@ -1,4 +1,4 @@
-import type { Movie } from "./types";
+import type { Movie, CastMember } from "./types";
 
 type RawMovieRow = {
     id: number;
@@ -24,7 +24,8 @@ type RawMovieRow = {
 export function mapMovies(
     rows: RawMovieRow[],
     genresByMovie: Record<number, string[]>,
-    platformsByMovie: Record<number, string[]>
+    platformsByMovie: Record<number, string[]>,
+    castByMovie: Record<number, CastMember[]> = {}
 ): Movie[] {
     return rows.map((row) => ({
         id: row.id,
@@ -46,5 +47,6 @@ export function mapMovies(
         director: row.director_name ?? "미상",
         genres: genresByMovie[row.id] ?? [],
         streamingPlatforms: platformsByMovie[row.id] ?? [],
+        cast: castByMovie[row.id] ?? [],
     }));
 }
