@@ -8,6 +8,8 @@ import type {
     Review,
     StreamingPlatform,
 } from "../types";
+import type { AdminMovieInput } from "../api/adminService";
+import AdminMoviePanel from "../components/AdminMoviePanel";
 import { buildRecommendations } from "../utils/recommendations";
 
 type MovieScreenProps = {
@@ -30,6 +32,12 @@ type MovieScreenProps = {
     isImportingData: boolean;
     onClearData: () => Promise<void>;
     isClearingData: boolean;
+    onCreateMovie: (movie: AdminMovieInput) => Promise<boolean>;
+    onUpdateMovie: (movieId: number, movie: AdminMovieInput) => Promise<boolean>;
+    onDeleteMovie: (movieId: number) => Promise<boolean>;
+    isCreatingMovie: boolean;
+    isUpdatingMovie: boolean;
+    isDeletingMovie: boolean;
 };
 
 const STATUS_OPTIONS: { value: string; label: string }[] = [
@@ -88,12 +96,19 @@ const MovieScreen: React.FC<MovieScreenProps> = ({
     isImportingData,
     onClearData,
     isClearingData,
+    onCreateMovie,
+    onUpdateMovie,
+    onDeleteMovie,
+    isCreatingMovie,
+    isUpdatingMovie,
+    isDeletingMovie,
 }) => {
     // 🔎 검색어
     const [searchQuery, setSearchQuery] = useState<string>("");
 
     // 좋아요 한 영화만 보기
     const [showLikedOnly, setShowLikedOnly] = useState<boolean>(false);
+    const [showPopularOnly, setShowPopularOnly] = useState<boolean>(false);
 
     // 개봉 상태 필터
     const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -169,6 +184,15 @@ const MovieScreen: React.FC<MovieScreenProps> = ({
         : user
             ? "좋아요나 리뷰를 남기면 감독 선호도를 분석해 맞춤 추천을 만들어요."
             : "로그인하고 좋아요를 누르면 감독 선호도를 분석해 드려요.";
+
+    const popularMovieSet = useMemo(() => {
+        const sorted = [...movies].sort((a, b) => {
+            const voteDiff = (b.voteCount ?? 0) - (a.voteCount ?? 0);
+            if (voteDiff !== 0) return voteDiff;
+            return (b.avgRating ?? 0) - (a.avgRating ?? 0);
+        });
+        return new Set(sorted.slice(0, 20).map((movie) => movie.id));
+    }, [movies]);
 
     const ratingStats = useMemo<RatingStatsSummary>(() => {
         const ratedEntries = movies
@@ -275,7 +299,13 @@ const MovieScreen: React.FC<MovieScreenProps> = ({
                     g.toLowerCase().includes(q)
                 );
                 const inYear = m.year.toString().includes(q);
-                return inTitle || inGenres || inYear;
+                const inDirector = m.director?.toLowerCase().includes(q) ?? false;
+                const inCast = (m.cast ?? []).some(
+                    (member) =>
+                        member.name.toLowerCase().includes(q) ||
+                        (member.character?.toLowerCase().includes(q) ?? false)
+                );
+                return inTitle || inGenres || inYear || inDirector || inCast;
             });
         }
 
@@ -291,6 +321,10 @@ const MovieScreen: React.FC<MovieScreenProps> = ({
             list = list.filter((m) =>
                 (m.streamingPlatforms ?? []).includes(platformFilter)
             );
+        }
+
+        if (showPopularOnly) {
+            list = list.filter((m) => popularMovieSet.has(m.id));
         }
 
         if (ratingFilter !== "all") {
@@ -309,8 +343,10 @@ const MovieScreen: React.FC<MovieScreenProps> = ({
         likedMovieIds,
         statusFilter,
         platformFilter,
+        showPopularOnly,
         ratingFilter,
         displayRatingByMovie,
+        popularMovieSet,
     ]);
 
     const labelSelected =
@@ -440,27 +476,28 @@ const MovieScreen: React.FC<MovieScreenProps> = ({
                                 (설정하지 않으면 전체 리스트가 노출됩니다.)
                             </p>
 
-                            {/* 좋아요 필터 */}
-                            <label
-                                style={{
-                                    display: "inline-flex",
-                                    alignItems: "center",
-                                    gap: 6,
-                                    fontSize: 12,
-                                    marginTop: 6,
-                                    cursor: "pointer",
-                                }}
-                            >
-                                <input
-                                    type="checkbox"
-                                    checked={showLikedOnly}
-                                    onChange={(e) =>
-                                        setShowLikedOnly(e.target.checked)
-                                    }
-                                    style={{ margin: 0 }}
-                                />
-                                <span>좋아요한 영화만 보기</span>
-                            </label>
+                            <div className="movie-main__toggles">
+                                <label className="movie-main__toggle">
+                                    <input
+                                        type="checkbox"
+                                        checked={showLikedOnly}
+                                        onChange={(e) =>
+                                            setShowLikedOnly(e.target.checked)
+                                        }
+                                    />
+                                    <span>좋아요한 영화만 보기</span>
+                                </label>
+                                <label className="movie-main__toggle">
+                                    <input
+                                        type="checkbox"
+                                        checked={showPopularOnly}
+                                        onChange={(e) =>
+                                            setShowPopularOnly(e.target.checked)
+                                        }
+                                    />
+                                    <span>인기 영화만 보기</span>
+                                </label>
+                            </div>
                         </div>
 
                         {/* 오른쪽: 총 개수 + 검색창 + 상태/플랫폼 필터 */}
@@ -548,11 +585,24 @@ const MovieScreen: React.FC<MovieScreenProps> = ({
                                 />
                             </div>
                         </div>
-                    </div>
                 </div>
+            </div>
 
-                {recommendedMovies.length > 0 && (
-                    <section className="movie-reco">
+            {isDevUser && (
+                <AdminMoviePanel
+                    genres={genres}
+                    movies={movies}
+                    onCreateMovie={onCreateMovie}
+                    onUpdateMovie={onUpdateMovie}
+                    onDeleteMovie={onDeleteMovie}
+                    isCreating={isCreatingMovie}
+                    isUpdating={isUpdatingMovie}
+                    isDeleting={isDeletingMovie}
+                />
+            )}
+
+            {recommendedMovies.length > 0 && (
+                <section className="movie-reco">
                         <div className="movie-reco__header">
                             <div>
                                 <div className="badge">Recommendations</div>
@@ -563,7 +613,7 @@ const MovieScreen: React.FC<MovieScreenProps> = ({
                             {hasPersonalizedRecommendations && topDirectors[0] ? (
                                 <div className="movie-reco__director">
                                     <span className="pill pill--outline">
-                                        선호 감독{" "}
+                                        선호 감독 ·{" "}
                                         <strong>{topDirectors[0].director}</strong>
                                     </span>
                                     <span className="pill pill--soft">

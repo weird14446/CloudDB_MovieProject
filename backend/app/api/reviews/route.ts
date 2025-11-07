@@ -48,6 +48,17 @@ export async function POST(request: Request) {
                 throw new Error("영화를 찾을 수 없습니다.");
             }
 
+            const [existingReviews] = await conn.query<{ id: number }[]>(
+                "SELECT id FROM reviews WHERE movie_id = ? AND user_id = ? LIMIT 1",
+                [movieId, userId]
+            );
+            if (existingReviews.length) {
+                return {
+                    duplicate: true as const,
+                    userName: userRows[0].name,
+                };
+            }
+
             const [insertResult] = await conn.query<{ insertId: number }>(
                 `
                 INSERT INTO reviews (movie_id, user_id, rating, content, status, created_at, updated_at)
@@ -59,10 +70,18 @@ export async function POST(request: Request) {
             await recalcMovieAggregates(conn, movieId);
 
             return {
+                duplicate: false as const,
                 id: insertResult.insertId,
                 userName: userRows[0].name,
             };
         });
+
+        if (result?.duplicate) {
+            return corsJson(
+                { ok: false, message: "이미 이 영화에 작성한 리뷰가 있습니다." },
+                { status: 409 }
+            );
+        }
 
         return corsJson({
             ok: true,

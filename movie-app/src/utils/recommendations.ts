@@ -22,7 +22,10 @@ type DirectorAccumulator = {
     seenCount: number;
     ratingCount: number;
     ratingSum: number;
-    qualitySum: number;
+    likedQualitySum: number;
+    seenQualitySum: number;
+    likedDisplaySum: number;
+    seenDisplaySum: number;
 };
 
 export type DirectorScore = {
@@ -126,9 +129,20 @@ export function buildRecommendations({
             : DEFAULT_GLOBAL_AVG;
 
     const qualityByMovie = new Map<number, number>();
+    const displayQualityByMovie = new Map<number, number>();
     const qualityValues: number[] = [];
     movies.forEach((movie) => {
-        const wr = imdbWeightedRating(movie.avgRating, movie.voteCount, globalAverage);
+        const reviews = reviewsByMovie[movie.id] ?? [];
+        const localAverage =
+            reviews.length > 0
+                ? reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length
+                : null;
+        const baseRating =
+            typeof movie.avgRating === "number" ? movie.avgRating : localAverage;
+        const displayRating = baseRating ?? globalAverage;
+        displayQualityByMovie.set(movie.id, displayRating);
+
+        const wr = imdbWeightedRating(displayRating, movie.voteCount, globalAverage);
         qualityByMovie.set(movie.id, wr);
         qualityValues.push(wr);
     });
@@ -166,13 +180,21 @@ export function buildRecommendations({
                 seenCount: 0,
                 ratingCount: 0,
                 ratingSum: 0,
-                qualitySum: 0,
+                likedQualitySum: 0,
+                seenQualitySum: 0,
+                likedDisplaySum: 0,
+                seenDisplaySum: 0,
             };
             const acc = stats[director];
+            const qualityValue = qualityByMovie.get(movie.id) ?? globalQualityMean;
+            const displayQuality = displayQualityByMovie.get(movie.id) ?? globalQualityMean;
             acc.seenCount += 1;
+            acc.seenQualitySum += qualityValue;
+            acc.seenDisplaySum += displayQuality;
             if (liked) {
                 acc.likedCount += 1;
-                acc.qualitySum += qualityByMovie.get(movie.id) ?? globalQualityMean;
+                acc.likedQualitySum += qualityValue;
+                acc.likedDisplaySum += displayQuality;
             }
             if (typeof userRating === "number") {
                 acc.ratingCount += 1;
@@ -194,11 +216,23 @@ export function buildRecommendations({
             const ratingComponent =
                 shrink > 0 ? Math.tanh((ratingDelta * shrink) / 0.7) : 0;
             const likeComponent = wilsonLowerBound(acc.likedCount, acc.seenCount);
-            const avgQuality =
-                acc.likedCount > 0
-                    ? acc.qualitySum / acc.likedCount
+            const qualitySourceCount =
+                acc.likedCount > 0 ? acc.likedCount : acc.seenCount;
+            const qualitySourceSum =
+                acc.likedCount > 0 ? acc.likedQualitySum : acc.seenQualitySum;
+            const avgQualityForScore =
+                qualitySourceCount > 0
+                    ? qualitySourceSum / qualitySourceCount
                     : globalQualityMean;
-            const qualityComponent = normalizeQuality(avgQuality, globalQualityMean);
+            const displaySourceCount =
+                acc.likedCount > 0 ? acc.likedCount : acc.seenCount;
+            const displaySourceSum =
+                acc.likedCount > 0 ? acc.likedDisplaySum : acc.seenDisplaySum;
+            const displayAvgQuality =
+                displaySourceCount > 0
+                    ? displaySourceSum / displaySourceCount
+                    : globalQualityMean;
+            const qualityComponent = normalizeQuality(avgQualityForScore, globalQualityMean);
 
             const score =
                 DIRECTOR_WEIGHTS.rating * ratingComponent +
@@ -209,7 +243,7 @@ export function buildRecommendations({
                 score,
                 likedCount: acc.likedCount,
                 seenCount: acc.seenCount,
-                avgQuality,
+                avgQuality: displayAvgQuality,
             });
         });
 

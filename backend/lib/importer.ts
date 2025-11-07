@@ -65,26 +65,28 @@ export async function importMovies(
 
             const movieId = insertResult.insertId;
 
-            if (movie.genres?.length) {
-                for (const slug of movie.genres) {
-                    const [genreRows] = await conn.query<{ id: number }[]>(
-                        "SELECT id FROM genres WHERE slug = ? LIMIT 1",
-                        [slug]
+        if (movie.genres?.length) {
+            for (const entry of movie.genres) {
+                const name = entry.trim();
+                if (!name) continue;
+                const [genreRows] = await conn.query<{ id: number }[]>(
+                    "SELECT id FROM genres WHERE name = ? LIMIT 1",
+                    [name]
+                );
+                let genreId = genreRows[0]?.id;
+                if (!genreId) {
+                    const [res] = await conn.query<{ insertId: number }>(
+                        "INSERT INTO genres (name) VALUES (?)",
+                        [name]
                     );
-                    let genreId = genreRows[0]?.id;
-                    if (!genreId) {
-                        const [res] = await conn.query<{ insertId: number }>(
-                            "INSERT INTO genres (slug, name) VALUES (?, ?)",
-                            [slug, slug]
-                        );
-                        genreId = res.insertId;
-                    }
-                    await conn.query(
-                        "INSERT IGNORE INTO movie_genres (movie_id, genre_id) VALUES (?, ?)",
-                        [movieId, genreId]
-                    );
+                    genreId = res.insertId;
                 }
+                await conn.query(
+                    "INSERT IGNORE INTO movie_genres (movie_id, genre_id) VALUES (?, ?)",
+                    [movieId, genreId]
+                );
             }
+        }
 
             if (movie.streamingPlatforms?.length) {
                 for (const platform of movie.streamingPlatforms) {

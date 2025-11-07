@@ -118,6 +118,18 @@ const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
             ? movie.streamingPlatforms.join(" · ")
             : "정보 없음";
 
+    const genreLabel =
+        movie.genres && movie.genres.length > 0
+            ? movie.genres
+                .map((slug) =>
+                    slug
+                        .split("-")
+                        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+                        .join(" ")
+                )
+                .join(" · ")
+            : "정보 없음";
+
     return (
         <>
         <div className="modal">
@@ -170,6 +182,10 @@ const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
                             <div className="movie-detail__meta-row">
                                 <span className="tag-chip">감독</span>
                                 <span>{movie.director || "정보 없음"}</span>
+                            </div>
+                            <div className="movie-detail__meta-row">
+                                <span className="tag-chip">장르</span>
+                                <span>{genreLabel}</span>
                             </div>
                             <div className="movie-detail__meta-row">
                                 <span className="tag-chip">연령 등급</span>

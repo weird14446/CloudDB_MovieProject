@@ -23,6 +23,17 @@ export async function POST(request: Request) {
 
     const pool = getPool();
     try {
+        const [nameRows] = await pool.query<{ id: number }[]>(
+            "SELECT id FROM users WHERE name = ? LIMIT 1",
+            [name]
+        );
+        if (nameRows.length) {
+            return corsJson(
+                { ok: false, message: "이미 사용 중인 닉네임입니다." },
+                { status: 409 }
+            );
+        }
+
         const hashed = hashPassword(password);
         const [result] = await pool.query<{ insertId: number }>(
             `
@@ -37,10 +48,11 @@ export async function POST(request: Request) {
         });
     } catch (error: any) {
         if (error?.code === "ER_DUP_ENTRY") {
-            return corsJson(
-                { ok: false, message: "이미 가입된 이메일입니다." },
-                { status: 409 }
-            );
+            const message =
+                typeof error?.message === "string" && error.message.includes("name")
+                    ? "이미 사용 중인 닉네임입니다."
+                    : "이미 가입된 이메일입니다.";
+            return corsJson({ ok: false, message }, { status: 409 });
         }
         console.error("[auth/signup]", error);
         return corsJson(

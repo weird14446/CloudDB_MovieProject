@@ -14,6 +14,28 @@ type SignupScreenProps = {
     onGoLogin: () => void;
 };
 
+function extractErrorMessage(error: unknown, fallback: string): string {
+    if (error instanceof Error && typeof error.message === "string") {
+        const trimmed = error.message.trim();
+        if (trimmed.startsWith("{")) {
+            try {
+                const parsed = JSON.parse(trimmed);
+                if (typeof parsed?.message === "string" && parsed.message.trim().length > 0) {
+                    return parsed.message;
+                }
+            } catch {
+                // ignore
+            }
+        } else if (trimmed.length > 0) {
+            return trimmed;
+        }
+    }
+    if (typeof error === "string" && error.trim().length > 0) {
+        return error.trim();
+    }
+    return fallback;
+}
+
 const SignupScreen: React.FC<SignupScreenProps> = ({
     onSignup,
     onClose,
@@ -57,8 +79,10 @@ const SignupScreen: React.FC<SignupScreenProps> = ({
                 })
             );
         } catch (err) {
-            const msg =
-                err instanceof Error ? err.message : "회원가입 중 오류가 발생했습니다.";
+            const msg = extractErrorMessage(
+                err,
+                "회원가입에 실패했습니다. 입력 정보를 다시 확인해주세요."
+            );
             setError(msg);
         } finally {
             setBusy(false);

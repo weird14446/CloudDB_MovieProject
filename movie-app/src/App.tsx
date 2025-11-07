@@ -10,7 +10,14 @@ import MovieDetailModal from "./components/MovieDetailModal";
 import type { User, Genre, Movie, Review } from "./types";
 import { fetchInitialData } from "./api/dataService";
 import { checkDbHealth } from "./api/health";
-import { fetchAndImportMoviesFromApi, clearDatabase } from "./api/adminService";
+import {
+    fetchAndImportMoviesFromApi,
+    clearDatabase,
+    createMovie as createAdminMovie,
+    updateMovie as updateAdminMovie,
+    deleteMovie as deleteAdminMovie,
+} from "./api/adminService";
+import type { AdminMovieInput } from "./api/adminService";
 import { createReview } from "./api/reviewService";
 import { fetchLikes, toggleLike } from "./api/likeService";
 
@@ -55,6 +62,9 @@ const App: React.FC = () => {
     const [dataError, setDataError] = useState<string | null>(null);
     const [importingData, setImportingData] = useState<boolean>(false);
     const [clearingData, setClearingData] = useState<boolean>(false);
+    const [creatingMovie, setCreatingMovie] = useState<boolean>(false);
+    const [updatingMovie, setUpdatingMovie] = useState<boolean>(false);
+    const [deletingMovie, setDeletingMovie] = useState<boolean>(false);
 
     const modalOpen =
         showLogin || showSignup || showGenres || activeMovie !== null;
@@ -219,7 +229,13 @@ const App: React.FC = () => {
                     userId: user.id!,
                 });
                 if (!response.ok || !response.review) {
-                    alert(response.message ?? "리뷰 등록에 실패했습니다.");
+                    const message =
+                        response.message &&
+                        (response.message.includes("이미") ||
+                            response.message.includes("작성"))
+                            ? "리뷰는 한 번만 작성할 수 있습니다."
+                            : response.message ?? "리뷰 등록에 실패했습니다.";
+                    alert(message);
                     return;
                 }
                 setReviewsByMovie((prev) => ({
@@ -228,7 +244,12 @@ const App: React.FC = () => {
                 }));
             } catch (error) {
                 console.error("[Review] error", error);
-                alert("리뷰 등록 중 오류가 발생했습니다.");
+                const message =
+                    error instanceof Error &&
+                    (error.message.includes("이미") || error.message.includes("작성"))
+                        ? "리뷰는 한 번만 작성할 수 있습니다."
+                        : "리뷰 등록에 실패했습니다.";
+                alert(message);
             }
         })();
     }
@@ -337,6 +358,132 @@ const App: React.FC = () => {
         }
     }, [isDevUser, loadInitialData]);
 
+    const handleCreateMovie = useCallback(
+        async (payload: AdminMovieInput): Promise<boolean> => {
+            if (!isDevUser) {
+                alert("관리자 전용 기능입니다.");
+                return false;
+            }
+            setCreatingMovie(true);
+            try {
+                const response = await createAdminMovie(payload);
+                const createdMovie = response.movie;
+                if (!response.ok || !createdMovie) {
+                    alert(response.message ?? "영화를 추가하지 못했습니다.");
+                    return false;
+                }
+                setMovies((prev) => {
+                    const exists = prev.some((movie) => movie.id === createdMovie.id);
+                    if (exists) {
+                        return prev.map((movie) =>
+                            movie.id === createdMovie.id ? createdMovie : movie
+                        );
+                    }
+                    return [createdMovie, ...prev];
+                });
+                setReviewsByMovie((prev) => ({
+                    ...prev,
+                    [createdMovie.id]: prev[createdMovie.id] ?? [],
+                }));
+                alert("새 영화가 추가되었습니다.");
+                return true;
+            } catch (error) {
+                alert(
+                    error instanceof Error
+                        ? `영화 추가 실패: ${error.message}`
+                        : "영화를 추가하지 못했습니다."
+                );
+                return false;
+            } finally {
+                setCreatingMovie(false);
+            }
+        },
+        [isDevUser]
+    );
+
+    const handleUpdateMovie = useCallback(
+        async (movieId: number, payload: AdminMovieInput): Promise<boolean> => {
+            if (!isDevUser) {
+                alert("관리자 전용 기능입니다.");
+                return false;
+            }
+            setUpdatingMovie(true);
+            try {
+                const response = await updateAdminMovie(movieId, payload);
+                if (!response.ok || !response.movie) {
+                    alert(response.message ?? "영화를 수정하지 못했습니다.");
+                    return false;
+                }
+                setMovies((prev) =>
+                    prev.map((movie) =>
+                        movie.id === movieId ? response.movie! : movie
+                    )
+                );
+                if (activeMovie?.id === movieId) {
+                    setActiveMovie(response.movie!);
+                }
+                alert("영화 정보가 수정되었습니다.");
+                return true;
+            } catch (error) {
+                alert(
+                    error instanceof Error
+                        ? `영화 수정 실패: ${error.message}`
+                        : "영화를 수정하지 못했습니다."
+                );
+                return false;
+            } finally {
+                setUpdatingMovie(false);
+            }
+        },
+        [isDevUser, activeMovie]
+    );
+
+    const handleDeleteMovie = useCallback(
+        async (movieId: number): Promise<boolean> => {
+            if (!isDevUser) {
+                alert("관리자 전용 기능입니다.");
+                return false;
+            }
+            setDeletingMovie(true);
+            try {
+                const response = await deleteAdminMovie(movieId);
+                if (!response.ok) {
+                    alert(response.message ?? "영화를 삭제하지 못했습니다.");
+                    return false;
+                }
+                setMovies((prev) => prev.filter((movie) => movie.id !== movieId));
+                setReviewsByMovie((prev) => {
+                    if (!(movieId in prev)) return prev;
+                    const next = { ...prev };
+                    delete next[movieId];
+                    return next;
+                });
+                setReportedReviewsByMovie((prev) => {
+                    if (!(movieId in prev)) return prev;
+                    const next = { ...prev };
+                    delete next[movieId];
+                    return next;
+                });
+                setLikedMovieIds((prev) => prev.filter((id) => id !== movieId));
+                if (activeMovie?.id === movieId) {
+                    setActiveMovie(null);
+                }
+                alert("영화가 삭제되었습니다.");
+                return true;
+            } catch (error) {
+                alert(
+                    error instanceof Error
+                        ? `영화 삭제 실패: ${error.message}`
+                        : "영화를 삭제하지 못했습니다."
+                );
+                return false;
+            } finally {
+                setDeletingMovie(false);
+            }
+        },
+        [isDevUser, activeMovie]
+    );
+
     return (
         <div className="app-root">
             <div
@@ -366,6 +513,12 @@ const App: React.FC = () => {
                     isImportingData={importingData}
                     onClearData={handleClearData}
                     isClearingData={clearingData}
+                    onCreateMovie={handleCreateMovie}
+                    onUpdateMovie={handleUpdateMovie}
+                    onDeleteMovie={handleDeleteMovie}
+                    isCreatingMovie={creatingMovie}
+                    isUpdatingMovie={updatingMovie}
+                    isDeletingMovie={deletingMovie}
                 />
             </div>
 

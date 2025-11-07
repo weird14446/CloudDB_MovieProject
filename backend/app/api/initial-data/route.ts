@@ -25,23 +25,38 @@ export async function GET() {
       LIMIT 200
     `);
 
-    const [genreRows] = await pool.query<Genre[]>(
-      "SELECT id, slug, name FROM genres ORDER BY id ASC"
+    const [genreRows] = await pool.query<{ id: number; name: string }[]>(
+      "SELECT id, name FROM genres ORDER BY id ASC"
     );
+
+    const toSlug = (name: string) =>
+      name
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9가-힣\s-]/g, "")
+        .replace(/\s+/g, "-") || String(name);
+
+    const normalizedGenres: Genre[] = genreRows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      slug: toSlug(row.name),
+    }));
 
     const movieIds = movieRows.map((row) => row.id);
 
     const movieGenresRows =
       movieIds.length > 0
-        ? await pool.query<{ movie_id: number; slug: string }[]>(
-            `
-        SELECT mg.movie_id, g.slug
+        ? await pool
+            .query<{ movie_id: number; name: string }[]>(
+              `
+        SELECT mg.movie_id, g.name
         FROM movie_genres mg
         JOIN genres g ON g.id = mg.genre_id
         WHERE mg.movie_id IN (?)
       `,
-            [movieIds]
-          ).then(([rows]) => rows)
+              [movieIds]
+            )
+            .then(([rows]) => rows)
         : [];
 
     const moviePlatformsRows =
@@ -78,10 +93,10 @@ export async function GET() {
             .then(([rows]) => rows)
         : [];
 
-    const genresByMovie = movieGenresRows.reduce<Record<number, string[]>>(
+    const genresByMovie = movieGenresRows.reduce<Record<number, string[]>>( 
       (acc, row) => {
         const list = acc[row.movie_id] ?? [];
-        list.push(row.slug);
+        list.push(toSlug(row.name));
         acc[row.movie_id] = list;
         return acc;
       },
@@ -113,9 +128,9 @@ export async function GET() {
       return acc;
     }, {});
 
-    return corsJson({
+        return corsJson({
       movies: formattedMovies,
-      genres: genreRows,
+      genres: normalizedGenres,
       reviewsByMovie,
     });
   } catch (error) {

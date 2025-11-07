@@ -34,7 +34,10 @@ export async function POST(request: Request) {
 
         if (!rows.length) {
             return corsJson(
-                { ok: false, message: "이메일 또는 비밀번호가 올바르지 않습니다." },
+                {
+                    ok: false,
+                    message: "입력하신 이메일 또는 비밀번호를 다시 확인해주세요.",
+                },
                 { status: 401 }
             );
         }
