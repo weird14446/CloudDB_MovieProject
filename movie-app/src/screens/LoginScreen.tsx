@@ -1,37 +1,18 @@
 import React, { useState } from "react";
+import { login as requestLogin } from "../api/authService";
 
-type LoginScreenProps = {
-    onLogin: (name: string, email: string, password: string) => void | Promise<void>;
-    onClose: () => void;
-    onGoSignup: () => void;
-};
-
-type StoredUser = {
+type AuthCallbackPayload = {
     name: string;
     email: string;
     password: string;
-    createdAt: string;
+    userId?: number;
 };
 
-const USERS_KEY = "movieApp:users";
-
-function loadUsers(): StoredUser[] {
-    try {
-        const raw = localStorage.getItem(USERS_KEY);
-        if (!raw) return [];
-        const parsed = JSON.parse(raw) as unknown;
-        if (!Array.isArray(parsed)) return [];
-        return parsed.filter(
-            (u) =>
-                typeof u === "object" &&
-                u !== null &&
-                typeof (u as any).email === "string" &&
-                typeof (u as any).password === "string"
-        ) as StoredUser[];
-    } catch {
-        return [];
-    }
-}
+type LoginScreenProps = {
+    onLogin: (payload: AuthCallbackPayload) => void | Promise<void>;
+    onClose: () => void;
+    onGoSignup: () => void;
+};
 
 const LoginScreen: React.FC<LoginScreenProps> = ({
     onLogin,
@@ -47,25 +28,35 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
         e.preventDefault();
         setError(null);
 
-        if (!email || !pw) {
+        const trimmedEmail = email.trim();
+        if (!trimmedEmail || !pw) {
             setError("이메일과 비밀번호를 입력해주세요.");
             return;
         }
 
+        const loginEmail =
+            trimmedEmail.toLowerCase() === "root" ? "root@dev.local" : trimmedEmail.toLowerCase();
         try {
             setBusy(true);
 
-            const users = loadUsers();
-            const found = users.find(
-                (u) => u.email === email.trim() && u.password === pw
-            );
+            const response = await requestLogin({
+                email: loginEmail,
+                password: pw,
+            });
 
-            if (!found) {
-                setError("이메일 또는 비밀번호가 올바르지 않습니다.");
+            if (!response.ok || !response.user) {
+                setError(response.message ?? "이메일 또는 비밀번호가 올바르지 않습니다.");
                 return;
             }
 
-            await Promise.resolve(onLogin(found.name, found.email, pw));
+            await Promise.resolve(
+                onLogin({
+                    name: response.user.name,
+                    email: response.user.email,
+                    password: pw,
+                    userId: response.user.id,
+                })
+            );
         } catch (err) {
             const msg =
                 err instanceof Error ? err.message : "로그인 중 오류가 발생했습니다.";
@@ -121,8 +112,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
                             type="password"
                         />
                         <span className="form-hint">
-                            현재는 브라우저 localStorage에만 저장됩니다.
-                            실제 서비스에서는 HTTPS + 안전한 해시(bcrypt 등)를 사용해야 합니다.
+                            비밀번호는 암호화되어 데이터베이스에 저장됩니다.
                         </span>
                     </label>
 

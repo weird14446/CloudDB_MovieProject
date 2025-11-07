@@ -1,22 +1,22 @@
 // src/components/MovieDetailModal.tsx
 
-import React, { useState, useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import type { Movie, Review, User } from "../types";
 
 type MovieDetailModalProps = {
     movie: Movie;
     reviews: Review[];
     user: User | null;
+    liked: boolean;
     onClose: () => void;
     onAddReview: (input: { rating: number; content: string }) => void;
-
-    // ❤️ 상세 모달에서도 좋아요 사용
-    isLiked: boolean;
     onToggleLike: () => void;
+    reportedReviewIds: number[];
+    onReportReview: (reviewId: number) => void;
 };
 
 function formatCurrency(amount?: number): string {
-    if (amount == null) return "정보 없음";
+    if (amount == null || amount <= 0) return "-";
     return new Intl.NumberFormat("ko-KR", {
         style: "currency",
         currency: "USD",
@@ -55,19 +55,18 @@ const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
     user,
     onClose,
     onAddReview,
-    isLiked,
+    liked,
     onToggleLike,
+    reportedReviewIds,
+    onReportReview,
 }) => {
     const [showTrailer, setShowTrailer] = useState(false);
     const [rating, setRating] = useState<number>(8);
     const [content, setContent] = useState("");
-
-    // 리뷰 평균 평점
-    const avgRating = useMemo(() => {
-        if (!reviews || reviews.length === 0) return null;
-        const sum = reviews.reduce((acc, r) => acc + r.rating, 0);
-        return sum / reviews.length;
-    }, [reviews]);
+    const reportedReviewSet = useMemo(
+        () => new Set(reportedReviewIds),
+        [reportedReviewIds]
+    );
 
     const trailerSrc =
         movie.trailerKey && movie.trailerSite === "Vimeo"
@@ -75,6 +74,13 @@ const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
             : movie.trailerKey
                 ? `https://www.youtube.com/embed/${movie.trailerKey}`
                 : null;
+
+    const avgRating =
+        reviews.length > 0
+            ? Math.round(
+                (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length) * 10
+            ) / 10
+            : null;
 
     function handleSubmitReview(e: React.FormEvent<HTMLFormElement>) {
         e.preventDefault();
@@ -87,7 +93,33 @@ const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
         setContent("");
     }
 
+    function handleClickLike() {
+        if (!user) {
+            alert("좋아요는 로그인 후 이용 가능합니다.");
+            return;
+        }
+        onToggleLike();
+    }
+
+    function handleReportReviewClick(reviewId: number) {
+        if (reportedReviewSet.has(reviewId)) {
+            alert("이미 신고 처리된 리뷰입니다.");
+            return;
+        }
+        const confirmed = window.confirm(
+            "이 리뷰를 신고하시겠습니까? 부적절한 내용은 검토 후 조치됩니다."
+        );
+        if (!confirmed) return;
+        onReportReview(reviewId);
+    }
+
+    const streamingLabel =
+        movie.streamingPlatforms && movie.streamingPlatforms.length > 0
+            ? movie.streamingPlatforms.join(" · ")
+            : "정보 없음";
+
     return (
+        <>
         <div className="modal">
             <div className="card card--glass modal-card movie-detail">
                 <div className="movie-detail__header">
@@ -96,30 +128,19 @@ const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
                         <span className="movie-detail__year">({movie.year})</span>
                     </h1>
 
-                    <div className="movie-detail__header-right">
-                        {avgRating !== null && (
-                            <div className="movie-detail__avg-pill">
-                                ★ {avgRating.toFixed(1)}
-                            </div>
-                        )}
-
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <button
                             type="button"
-                            className={
-                                "btn btn--ghost btn--sm movie-detail__like-btn" +
-                                (isLiked ? " movie-detail__like-btn--active" : "")
-                            }
-                            onClick={() => {
-                                if (!user) {
-                                    alert("좋아요를 사용하려면 로그인 해주세요.");
-                                    return;
-                                }
-                                onToggleLike();
-                            }}
+                            className="btn btn--ghost btn--sm"
+                            onClick={handleClickLike}
                         >
-                            {isLiked ? "♥ 좋아요" : "♡ 좋아요"}
+                            {liked ? "♥ 좋아요 취소" : "♡ 좋아요"}
                         </button>
-
+                        <div className="pill pill--soft" style={{ fontSize: 12 }}>
+                            {avgRating !== null
+                                ? `★ ${avgRating.toFixed(1)} / 10 · 리뷰 ${reviews.length}개`
+                                : "아직 평균 평점 없음"}
+                        </div>
                         <button
                             type="button"
                             className="btn btn--ghost btn--sm"
@@ -147,6 +168,14 @@ const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
                                 <span>{getStatusLabel(movie.status)}</span>
                             </div>
                             <div className="movie-detail__meta-row">
+                                <span className="tag-chip">감독</span>
+                                <span>{movie.director || "정보 없음"}</span>
+                            </div>
+                            <div className="movie-detail__meta-row">
+                                <span className="tag-chip">연령 등급</span>
+                                <span>{movie.ageRating ?? "정보 없음"}</span>
+                            </div>
+                            <div className="movie-detail__meta-row">
                                 <span className="tag-chip">개봉일</span>
                                 <span>{formatDate(movie.releaseDate)}</span>
                             </div>
@@ -164,6 +193,10 @@ const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
                                 <span className="tag-chip">수익</span>
                                 <span>{formatCurrency(movie.revenue)}</span>
                             </div>
+                            <div className="movie-detail__meta-row">
+                                <span className="tag-chip">스트리밍</span>
+                                <span>{streamingLabel}</span>
+                            </div>
                         </div>
 
                         <button
@@ -179,18 +212,6 @@ const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
                                 : "트레일러 정보 없음"}
                         </button>
 
-                        {showTrailer && trailerSrc && (
-                            <div className="movie-detail__trailer">
-                                <div className="movie-detail__trailer-inner">
-                                    <iframe
-                                        src={trailerSrc}
-                                        title={`${movie.title} trailer`}
-                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                                        allowFullScreen
-                                    />
-                                </div>
-                            </div>
-                        )}
                     </div>
 
                     {/* 줄거리 + 출연진 + 리뷰 */}
@@ -220,9 +241,7 @@ const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
                                             <div className="cast-card__info">
                                                 <div className="cast-card__name">{c.name}</div>
                                                 {c.character && (
-                                                    <div className="cast-card__role">
-                                                        {c.character}
-                                                    </div>
+                                                    <div className="cast-card__role">{c.character}</div>
                                                 )}
                                             </div>
                                         </div>
@@ -240,7 +259,15 @@ const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
                             {reviews.length > 0 ? (
                                 <div className="review-list">
                                     {reviews.map((r) => (
-                                        <div key={r.id} className="review-item">
+                                        <div
+                                            key={r.id}
+                                            className={
+                                                "review-item" +
+                                                (reportedReviewSet.has(r.id)
+                                                    ? " review-item--reported"
+                                                    : "")
+                                            }
+                                        >
                                             <div className="review-item__header">
                                                 <span className="review-item__author">
                                                     {r.userName}
@@ -249,9 +276,21 @@ const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
                                                     ★ {r.rating}/10
                                                 </span>
                                             </div>
-                                            <p className="review-item__content">
-                                                {r.content}
-                                            </p>
+                                            <p className="review-item__content">{r.content}</p>
+                                            <div className="review-item__footer">
+                                                <button
+                                                    type="button"
+                                                    className="btn btn--ghost btn--xs review-item__report-btn"
+                                                    disabled={reportedReviewSet.has(r.id)}
+                                                    onClick={() =>
+                                                        handleReportReviewClick(r.id)
+                                                    }
+                                                >
+                                                    {reportedReviewSet.has(r.id)
+                                                        ? "신고 완료"
+                                                        : "신고"}
+                                                </button>
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
@@ -261,7 +300,7 @@ const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
                                 </p>
                             )}
 
-                            {/* 로그인한 유저만 리뷰 작성 가능 */}
+                            {/* ✅ 로그인한 유저만 리뷰 작성 가능 */}
                             {user ? (
                                 <form className="review-form" onSubmit={handleSubmitReview}>
                                     <div className="review-form__row">
@@ -294,10 +333,7 @@ const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
                                             placeholder="영화에 대한 느낌을 자유롭게 적어주세요."
                                         />
                                     </label>
-                                    <button
-                                        type="submit"
-                                        className="btn btn--primary btn--full"
-                                    >
+                                    <button type="submit" className="btn btn--primary btn--full">
                                         리뷰 남기기
                                     </button>
                                 </form>
@@ -311,6 +347,32 @@ const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
                 </div>
             </div>
         </div>
+        {showTrailer && trailerSrc && (
+            <div className="trailer-modal">
+                <div
+                    className="trailer-modal__backdrop"
+                    onClick={() => setShowTrailer(false)}
+                />
+                <div className="trailer-modal__content">
+                    <button
+                        type="button"
+                        className="btn btn--ghost btn--sm trailer-modal__close"
+                        onClick={() => setShowTrailer(false)}
+                    >
+                        닫기
+                    </button>
+                    <div className="trailer-modal__frame">
+                        <iframe
+                            src={trailerSrc}
+                            title={`${movie.title} trailer`}
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                            allowFullScreen
+                        />
+                    </div>
+                </div>
+            </div>
+        )}
+        </>
     );
 };
 

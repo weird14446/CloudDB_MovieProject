@@ -1,45 +1,18 @@
 import React, { useState } from "react";
+import { signup as requestSignup } from "../api/authService";
 
-type SignupScreenProps = {
-    onSignup: (name: string, email: string, password: string) => void | Promise<void>;
-    onClose: () => void;
-    onGoLogin: () => void;
-};
-
-type StoredUser = {
+type AuthCallbackPayload = {
     name: string;
     email: string;
     password: string;
-    createdAt: string;
+    userId?: number;
 };
 
-const USERS_KEY = "movieApp:users";
-
-function loadUsers(): StoredUser[] {
-    try {
-        const raw = localStorage.getItem(USERS_KEY);
-        if (!raw) return [];
-        const parsed = JSON.parse(raw) as unknown;
-        if (!Array.isArray(parsed)) return [];
-        return parsed.filter(
-            (u) =>
-                typeof u === "object" &&
-                u !== null &&
-                typeof (u as any).email === "string" &&
-                typeof (u as any).password === "string"
-        ) as StoredUser[];
-    } catch {
-        return [];
-    }
-}
-
-function saveUsers(users: StoredUser[]) {
-    try {
-        localStorage.setItem(USERS_KEY, JSON.stringify(users));
-    } catch {
-        // 실패해도 무시
-    }
-}
+type SignupScreenProps = {
+    onSignup: (payload: AuthCallbackPayload) => void | Promise<void>;
+    onClose: () => void;
+    onGoLogin: () => void;
+};
 
 const SignupScreen: React.FC<SignupScreenProps> = ({
     onSignup,
@@ -64,23 +37,25 @@ const SignupScreen: React.FC<SignupScreenProps> = ({
         try {
             setBusy(true);
 
-            const users = loadUsers();
-            const exists = users.find((u) => u.email === email.trim());
-            if (exists) {
-                setError("이미 가입된 이메일입니다. 로그인으로 진행해주세요.");
+            const response = await requestSignup({
+                name: name.trim(),
+                email: email.trim().toLowerCase(),
+                password: pw,
+            });
+
+            if (!response.ok || !response.user) {
+                setError(response.message ?? "회원가입에 실패했습니다.");
                 return;
             }
 
-            const newUser: StoredUser = {
-                name: name.trim(),
-                email: email.trim(),
-                password: pw,
-                createdAt: new Date().toISOString(),
-            };
-
-            saveUsers([...users, newUser]);
-
-            await Promise.resolve(onSignup(newUser.name, newUser.email, pw));
+            await Promise.resolve(
+                onSignup({
+                    name: response.user.name,
+                    email: response.user.email,
+                    password: pw,
+                    userId: response.user.id,
+                })
+            );
         } catch (err) {
             const msg =
                 err instanceof Error ? err.message : "회원가입 중 오류가 발생했습니다.";
@@ -146,8 +121,7 @@ const SignupScreen: React.FC<SignupScreenProps> = ({
                             type="password"
                         />
                         <span className="form-hint">
-                            현재는 브라우저 localStorage에만 저장됩니다.
-                            실제 서비스에서는 HTTPS + 안전한 해시(bcrypt 등)를 사용해야 합니다.
+                            입력한 정보는 안전하게 서버에 저장됩니다.
                         </span>
                     </label>
 
