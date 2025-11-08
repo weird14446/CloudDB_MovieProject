@@ -1,13 +1,13 @@
 // src/App.tsx
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import "./App.css";
 import LoginScreen from "./screens/LoginScreen";
 import SignupScreen from "./screens/SignupScreen";
 import GenreScreen from "./screens/GenreScreen";
 import MovieScreen from "./screens/MovieScreen";
 import MovieDetailModal from "./components/MovieDetailModal";
-import type { User, Genre, Movie, Review } from "./types";
+import type { User, Genre, Movie, Review, DirectorScore } from "./types";
 import { fetchInitialData } from "./api/dataService";
 import { checkDbHealth } from "./api/health";
 import {
@@ -26,6 +26,10 @@ import {
     savePreferredGenres,
 } from "./api/preferenceService";
 import { reportReview } from "./api/reportService";
+import {
+    fetchRecommendations,
+    type RecommendationMovieScore,
+} from "./api/recommendationService";
 
 type ReviewsByMovie = Record<number, Review[]>;
 
@@ -60,9 +64,29 @@ const App: React.FC = () => {
     const [updatingMovie, setUpdatingMovie] = useState<boolean>(false);
     const [deletingMovie, setDeletingMovie] = useState<boolean>(false);
     const [refreshingMovies, setRefreshingMovies] = useState<boolean>(false);
+    const [recommendationScores, setRecommendationScores] = useState<
+        RecommendationMovieScore[]
+    >([]);
+    const [directorScores, setDirectorScores] = useState<DirectorScore[]>([]);
+    const [recommendationsLoading, setRecommendationsLoading] =
+        useState<boolean>(false);
+    const [recommendationsError, setRecommendationsError] = useState<string | null>(
+        null
+    );
+    const [reviewVersion, setReviewVersion] = useState(0);
 
     const modalOpen =
         showLogin || showSignup || showGenres || activeMovie !== null;
+
+    const recommendedMovies = useMemo(() => {
+        if (!recommendationScores.length || !movies.length) {
+            return [];
+        }
+        const movieMap = new Map(movies.map((movie) => [movie.id, movie]));
+        return recommendationScores
+            .map(({ movieId }) => movieMap.get(movieId))
+            .filter((movie): movie is Movie => Boolean(movie));
+    }, [recommendationScores, movies]);
 
     useEffect(() => {
         if (activeMovie) {
@@ -169,6 +193,51 @@ const App: React.FC = () => {
         }
     }, [user?.id, fetchUserLikes]);
 
+    useEffect(() => {
+        let cancelled = false;
+        async function loadRecommendationsFromServer(): Promise<void> {
+            setRecommendationsLoading(true);
+            setRecommendationsError(null);
+            try {
+                const response = await fetchRecommendations({
+                    userId: user?.id,
+                    selectedGenres,
+                    topK: 6,
+                });
+                if (cancelled) return;
+                if (!response.ok) {
+                    setRecommendationScores([]);
+                    setDirectorScores([]);
+                    setRecommendationsError(
+                        response.message ?? "추천 정보를 불러오지 못했습니다."
+                    );
+                    return;
+                }
+                setRecommendationScores(response.recommendations ?? []);
+                setDirectorScores(response.directorScores ?? []);
+            } catch (error) {
+                if (cancelled) return;
+                setRecommendationScores([]);
+                setDirectorScores([]);
+                setRecommendationsError(
+                    error instanceof Error
+                        ? error.message
+                        : "추천 정보를 불러오지 못했습니다."
+                );
+            } finally {
+                if (!cancelled) {
+                    setRecommendationsLoading(false);
+                }
+            }
+        }
+
+        void loadRecommendationsFromServer();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [user?.id, selectedGenres, likedMovieIds, reviewVersion, movies.length]);
+
     async function handleLogin(payload: AuthCallbackPayload): Promise<void> {
         const nextUser: User = {
             name: payload.name,
@@ -265,6 +334,7 @@ const App: React.FC = () => {
                     ...prev,
                     [movieId]: [...(prev[movieId] ?? []), response.review!],
                 }));
+                setReviewVersion((prev) => prev + 1);
             } catch (error) {
                 console.error("[Review] error", error);
                 const message =
@@ -587,6 +657,10 @@ const App: React.FC = () => {
                     onLogout={handleLogout}
                     onOpenMovie={handleOpenMovie}
                     reviewsByMovie={reviewsByMovie}
+                    recommendedMovies={recommendedMovies}
+                    directorScores={directorScores}
+                    recommendationsLoading={recommendationsLoading}
+                    recommendationError={recommendationsError}
                     isLoading={dataLoading}
                     fetchError={dataError}
                     onReloadData={loadInitialData}

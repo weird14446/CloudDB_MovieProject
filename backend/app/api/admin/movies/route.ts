@@ -3,6 +3,7 @@ import { withConnection } from "@/lib/db";
 import { mapMovies } from "@/lib/formatters";
 import type { Movie } from "@/lib/types";
 import type { PoolConnection } from "mysql2/promise";
+import { RATING_STATS_SUBQUERY } from "@/lib/sql";
 
 const ADMIN_TOKEN = process.env.ADMIN_IMPORT_TOKEN || "root-import";
 
@@ -67,24 +68,12 @@ function slugify(value: string): string {
         .replace(/\s+/g, "-");
 }
 
-async function ensureDirectorId(
-    conn: PoolConnection,
-    name?: string | null
-): Promise<number | null> {
-    const directorName = normalizeString(name);
-    if (!directorName) return null;
-    const [rows] = await conn.query<{ id: number }[]>(
-        "SELECT id FROM directors WHERE name = ? LIMIT 1",
-        [directorName]
-    );
-    if (rows.length) {
-        return rows[0].id;
-    }
-    const [insert] = await conn.query<{ insertId: number }>(
-        "INSERT INTO directors (name) VALUES (?)",
-        [directorName]
-    );
-    return insert.insertId;
+function parseDirectors(value?: string | null): string[] {
+    if (!value) return [];
+    return value
+        .split(",")
+        .map((name) => name.trim())
+        .filter((name) => name.length > 0);
 }
 
 async function attachGenres(
@@ -141,6 +130,23 @@ async function attachPlatforms(
     }
 }
 
+async function attachDirectors(
+    conn: PoolConnection,
+    movieId: number,
+    directorField?: string | null
+) {
+    const names = parseDirectors(directorField);
+    await conn.query("DELETE FROM movie_directors WHERE movie_id = ?", [movieId]);
+    for (const name of names) {
+        const personId = await ensurePerson(conn, name);
+        if (!personId) continue;
+        await conn.query(
+            "INSERT IGNORE INTO movie_directors (movie_id, person_id) VALUES (?, ?)",
+            [movieId, personId]
+        );
+    }
+}
+
 async function fetchMovie(
     conn: PoolConnection,
     movieId: number
@@ -148,13 +154,21 @@ async function fetchMovie(
     const [movieRows] = await conn.query<any[]>(
         `
         SELECT m.*,
-               d.name AS director_name,
+               dir.director_names AS director_name,
                s.avg_rating,
                s.vote_count,
                s.weighted_rating
         FROM movies m
-        LEFT JOIN directors d ON d.id = m.director_id
-        LEFT JOIN movie_rating_stats s ON s.movie_id = m.id
+        LEFT JOIN (
+            SELECT md.movie_id,
+                   GROUP_CONCAT(p.name ORDER BY p.name SEPARATOR ', ') AS director_names
+            FROM movie_directors md
+            JOIN people p ON p.id = md.person_id
+            GROUP BY md.movie_id
+        ) dir ON dir.movie_id = m.id
+        LEFT JOIN (
+            ${RATING_STATS_SUBQUERY}
+        ) s ON s.movie_id = m.id
         WHERE m.id = ?
         LIMIT 1
     `,
@@ -224,8 +238,7 @@ async function fetchMovie(
 function buildMovieValues(
     movie: AdminMoviePayload | undefined,
     title: string,
-    year: number,
-    directorId: number | null
+    year: number
 ) {
     return [
         movie?.tmdbId ?? null,
@@ -241,7 +254,6 @@ function buildMovieValues(
         movie?.trailerSite ?? null,
         normalizeString(movie?.trailerKey),
         normalizeString(movie?.ageRating),
-        directorId,
     ];
 }
 
@@ -287,21 +299,21 @@ export async function POST(request: Request) {
                 throw new Error("이미 동일한 제목과 연도의 영화가 존재합니다.");
             }
 
-            const directorId = await ensureDirectorId(conn, movie?.director);
-            const values = buildMovieValues(movie, title, year, directorId);
+            const values = buildMovieValues(movie, title, year);
 
             const [insert] = await conn.query<{ insertId: number }>(
                 `INSERT INTO movies
                 (tmdb_id, title, year, overview, poster_url, release_date, status,
                  budget, revenue, runtime_minutes, trailer_site, trailer_key,
-                 age_rating, director_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                 age_rating)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 values
             );
 
             const movieId = insert.insertId;
             await attachGenres(conn, movieId, movie?.genres ?? []);
             await attachPlatforms(conn, movieId, movie?.streamingPlatforms ?? []);
+            await attachDirectors(conn, movieId, movie?.director);
 
             return fetchMovie(conn, movieId);
             })
@@ -366,8 +378,7 @@ export async function PUT(request: Request) {
                     throw new Error("동일한 제목과 연도의 다른 영화가 이미 존재합니다.");
                 }
 
-                const directorId = await ensureDirectorId(conn, movie?.director);
-                const values = buildMovieValues(movie, title, year, directorId);
+                const values = buildMovieValues(movie, title, year);
 
                 await conn.query(
                     `UPDATE movies
@@ -383,8 +394,7 @@ export async function PUT(request: Request) {
                          runtime_minutes = ?,
                          trailer_site = ?,
                          trailer_key = ?,
-                         age_rating = ?,
-                         director_id = ?
+                         age_rating = ?
                      WHERE id = ?`,
                     [...values, movieId]
                 );
@@ -398,6 +408,7 @@ export async function PUT(request: Request) {
 
                 await attachGenres(conn, movieId, movie?.genres ?? []);
                 await attachPlatforms(conn, movieId, movie?.streamingPlatforms ?? []);
+                await attachDirectors(conn, movieId, movie?.director);
 
                 return fetchMovie(conn, movieId);
             })
@@ -448,9 +459,6 @@ export async function DELETE(request: Request) {
             ]);
             await conn.query("DELETE FROM reviews WHERE movie_id = ?", [movieId]);
             await conn.query("DELETE FROM likes WHERE movie_id = ?", [movieId]);
-            await conn.query("DELETE FROM movie_rating_stats WHERE movie_id = ?", [
-                movieId,
-            ]);
             await conn.query("DELETE FROM movie_rating_hist WHERE movie_id = ?", [
                 movieId,
             ]);
@@ -487,4 +495,31 @@ export async function DELETE(request: Request) {
 
 export function OPTIONS() {
     return corsEmpty();
+}
+async function ensurePerson(
+    conn: PoolConnection,
+    name?: string | null,
+    profileUrl?: string | null
+): Promise<number | null> {
+    const normalized = name?.trim();
+    if (!normalized) return null;
+    const [existing] = await conn.query<{ id: number; profile_url: string | null }[]>(
+        "SELECT id, profile_url FROM people WHERE name = ? LIMIT 1",
+        [normalized]
+    );
+    if (existing.length) {
+        const person = existing[0];
+        if (profileUrl && profileUrl !== person.profile_url) {
+            await conn.query("UPDATE people SET profile_url = ? WHERE id = ?", [
+                profileUrl,
+                person.id,
+            ]);
+        }
+        return person.id;
+    }
+    const [insert] = await conn.query<{ insertId: number }>(
+        "INSERT INTO people (name, profile_url) VALUES (?, ?)",
+        [normalized, profileUrl ?? null]
+    );
+    return insert.insertId;
 }

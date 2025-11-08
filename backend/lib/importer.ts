@@ -1,6 +1,61 @@
 import type { Movie } from "./types";
 import type { PoolConnection } from "mysql2/promise";
 
+async function ensurePerson(
+    conn: PoolConnection,
+    name?: string | null,
+    profileUrl?: string | null
+): Promise<number | null> {
+    const normalized = name?.trim();
+    if (!normalized) return null;
+
+    const [existing] = await conn.query<{ id: number; profile_url: string | null }[]>(
+        "SELECT id, profile_url FROM people WHERE name = ? LIMIT 1",
+        [normalized]
+    );
+    if (existing.length) {
+        const person = existing[0];
+        if (profileUrl && profileUrl !== person.profile_url) {
+            await conn.query("UPDATE people SET profile_url = ? WHERE id = ?", [
+                profileUrl,
+                person.id,
+            ]);
+        }
+        return person.id;
+    }
+
+    const [insert] = await conn.query<{ insertId: number }>(
+        "INSERT INTO people (name, profile_url) VALUES (?, ?)",
+        [normalized, profileUrl ?? null]
+    );
+    return insert.insertId;
+}
+
+function parseDirectors(value?: string | null): string[] {
+    if (!value) return [];
+    return value
+        .split(",")
+        .map((name) => name.trim())
+        .filter((name) => name.length > 0);
+}
+
+async function attachDirectors(
+    conn: PoolConnection,
+    movieId: number,
+    directorField?: string | null
+): Promise<void> {
+    const names = parseDirectors(directorField);
+    await conn.query("DELETE FROM movie_directors WHERE movie_id = ?", [movieId]);
+    for (const name of names) {
+        const personId = await ensurePerson(conn, name);
+        if (!personId) continue;
+        await conn.query(
+            "INSERT IGNORE INTO movie_directors (movie_id, person_id) VALUES (?, ?)",
+            [movieId, personId]
+        );
+    }
+}
+
 export async function importMovies(
     conn: PoolConnection,
     movies: Movie[]
@@ -11,24 +66,6 @@ export async function importMovies(
 
     try {
         for (const movie of movies) {
-            const directorName = movie.director?.trim();
-            let directorId: number | null = null;
-            if (directorName) {
-                const [directorRows] = await conn.query<{ id: number }[]>(
-                    "SELECT id FROM directors WHERE name = ? LIMIT 1",
-                    [directorName]
-                );
-                if (directorRows.length > 0) {
-                    directorId = directorRows[0].id;
-                } else {
-                    const [res] = await conn.query<{ insertId: number }>(
-                        "INSERT INTO directors (name) VALUES (?)",
-                        [directorName]
-                    );
-                    directorId = res.insertId;
-                }
-            }
-
             const tmdbId = movie.tmdbId ?? movie.id;
             const [existingRows] = await conn.query<{ id: number }[]>(
                 "SELECT id FROM movies WHERE tmdb_id = ? OR title = ? LIMIT 1",
@@ -43,8 +80,8 @@ export async function importMovies(
             const [insertResult] = await conn.query<{ insertId: number }>(
                 `INSERT INTO movies
                 (tmdb_id, title, year, overview, poster_url, release_date, status, budget, revenue,
-                 runtime_minutes, trailer_site, trailer_key, age_rating, director_id)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                 runtime_minutes, trailer_site, trailer_key, age_rating)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
                     tmdbId,
                     movie.title,
@@ -59,7 +96,6 @@ export async function importMovies(
                     movie.trailerSite ?? null,
                     movie.trailerKey ?? null,
                     movie.ageRating ?? null,
-                    directorId,
                 ]
             );
 
@@ -148,6 +184,8 @@ export async function importMovies(
                 }
             }
 
+            await attachDirectors(conn, movieId, movie.director);
+
             inserted += 1;
         }
 
@@ -165,24 +203,6 @@ export async function updateExistingMovie(
     movieId: number,
     movie: Movie
 ) {
-    const directorName = movie.director?.trim();
-    let directorId: number | null = null;
-    if (directorName) {
-        const [directorRows] = await conn.query<{ id: number }[]>(
-            "SELECT id FROM directors WHERE name = ? LIMIT 1",
-            [directorName]
-        );
-        if (directorRows.length > 0) {
-            directorId = directorRows[0].id;
-        } else {
-            const [res] = await conn.query<{ insertId: number }>(
-                "INSERT INTO directors (name) VALUES (?)",
-                [directorName]
-            );
-            directorId = res.insertId;
-        }
-    }
-
     await conn.query(
         `UPDATE movies
          SET tmdb_id = ?,
@@ -197,8 +217,7 @@ export async function updateExistingMovie(
              runtime_minutes = ?,
              trailer_site = ?,
              trailer_key = ?,
-             age_rating = ?,
-             director_id = ?
+             age_rating = ?
          WHERE id = ?`,
         [
             movie.tmdbId ?? movie.id ?? null,
@@ -214,7 +233,6 @@ export async function updateExistingMovie(
             movie.trailerSite ?? null,
             movie.trailerKey ?? null,
             movie.ageRating ?? null,
-            directorId,
             movieId,
         ]
     );
@@ -306,4 +324,6 @@ export async function updateExistingMovie(
             order += 1;
         }
     }
+
+    await attachDirectors(conn, movieId, movie.director);
 }

@@ -24,11 +24,10 @@ export async function POST(request: Request) {
                     "likes",
                     "movie_streaming_platforms",
                     "movie_cast",
+                    "movie_directors",
                     "movie_genres",
                     "movie_rating_hist",
-                    "movie_rating_stats",
                     "movies",
-                    "directors",
                 ];
                 for (const table of tablesToTruncate) {
                     await conn.query(`TRUNCATE TABLE ${table}`);

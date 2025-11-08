@@ -1,9 +1,4 @@
-import type { Movie, Review, User } from "../types";
-
-const DEFAULT_GLOBAL_AVG = 6.5;
-const DEFAULT_MIN_VOTES = 150;
-const Z_SCORE = 1.281551565545;
-const RATING_SHRINK_C = 3;
+import { imdbWeightedRating, DEFAULT_GLOBAL_AVG } from "./rating";
 
 const DIRECTOR_WEIGHTS = {
     rating: 0.5,
@@ -17,15 +12,21 @@ const RECOMMENDATION_WEIGHTS = {
     genre: 0.15,
 } as const;
 
-type DirectorAccumulator = {
-    likedCount: number;
-    seenCount: number;
-    ratingCount: number;
-    ratingSum: number;
-    likedQualitySum: number;
-    seenQualitySum: number;
-    likedDisplaySum: number;
-    seenDisplaySum: number;
+const Z_SCORE = 1.281551565545;
+const RATING_SHRINK_C = 3;
+
+export type RecommendationMovieInput = {
+    id: number;
+    director: string;
+    genres: string[];
+    avgRating: number | null;
+    voteCount: number | null;
+    weightedRating: number | null;
+};
+
+export type RecommendationMovieScore = {
+    movieId: number;
+    score: number;
 };
 
 export type DirectorScore = {
@@ -36,18 +37,18 @@ export type DirectorScore = {
     avgQuality: number;
 };
 
-export type RecommendationParams = {
-    movies: Movie[];
+export type RecommendationComputationInput = {
+    movies: RecommendationMovieInput[];
     likedMovieIds: number[];
-    reviewsByMovie: Record<number, Review[]>;
-    user: User | null;
+    userRatingsByMovie: Record<number, number>;
     selectedGenres: string[];
-    topK?: number;
+    topK: number;
 };
 
-export type RecommendationResult = {
-    recommendedMovies: Movie[];
+export type RecommendationComputationResult = {
+    rankedMovies: RecommendationMovieScore[];
     directorScores: DirectorScore[];
+    hasPreferenceSignals: boolean;
 };
 
 function normalizeQuality(value: number, baseline: number): number {
@@ -66,63 +67,43 @@ export function wilsonLowerBound(successes: number, total: number, z = Z_SCORE):
     return Math.max(0, (centre - margin) / denom);
 }
 
-export function imdbWeightedRating(
-    rating?: number,
-    voteCount?: number,
-    globalAverage = DEFAULT_GLOBAL_AVG,
-    minVotes = DEFAULT_MIN_VOTES
-): number {
-    const R = typeof rating === "number" ? rating : globalAverage;
-    const v = typeof voteCount === "number" ? voteCount : 0;
-    if (v <= 0) {
-        return R;
-    }
-    return (v / (v + minVotes)) * R + (minVotes / (v + minVotes)) * globalAverage;
-}
-
-function computeUserRatings(
-    movies: Movie[],
-    reviewsByMovie: Record<number, Review[]>,
-    user: User | null
-): Record<number, number> {
-    if (!user) return {};
-    const map: Record<number, number> = {};
-    movies.forEach((movie) => {
-        const personalReviews = (reviewsByMovie[movie.id] ?? []).filter(
-            (review) => review.userName === user.name
-        );
-        if (personalReviews.length === 0) return;
-        const avg =
-            personalReviews.reduce((sum, review) => sum + review.rating, 0) /
-            personalReviews.length;
-        map[movie.id] = avg;
-    });
-    return map;
-}
-
-function computeGenreAffinity(movie: Movie, selected: Set<string>): number {
+function computeGenreAffinity(movieGenres: string[], selected: Set<string>): number {
     if (selected.size === 0) return 0;
-    const overlap = movie.genres.reduce(
-        (acc, genre) => acc + (selected.has(genre) ? 1 : 0),
+    const overlap = movieGenres.reduce(
+        (total, genre) => total + (selected.has(genre) ? 1 : 0),
         0
     );
     return overlap / selected.size;
 }
 
-export function buildRecommendations({
+export function computeRecommendationRanking({
     movies,
     likedMovieIds,
-    reviewsByMovie,
-    user,
+    userRatingsByMovie,
     selectedGenres,
-    topK = 6,
-}: RecommendationParams): RecommendationResult {
+    topK,
+}: RecommendationComputationInput): RecommendationComputationResult {
+    if (!movies.length) {
+        return {
+            rankedMovies: [],
+            directorScores: [],
+            hasPreferenceSignals: false,
+        };
+    }
+
+    const effectiveTopK = Math.max(1, Math.min(topK, 20));
     const likedSet = new Set(likedMovieIds);
     const selectedGenreSet = new Set(selectedGenres);
 
     const ratingSamples = movies
-        .map((movie) => movie.avgRating)
-        .filter((value): value is number => typeof value === "number");
+        .map((movie) =>
+            typeof movie.avgRating === "number"
+                ? movie.avgRating
+                : typeof movie.weightedRating === "number"
+                    ? movie.weightedRating
+                    : null
+        )
+        .filter((value): value is number => value !== null);
     const globalAverage =
         ratingSamples.length > 0
             ? ratingSamples.reduce((sum, value) => sum + value, 0) / ratingSamples.length
@@ -132,26 +113,25 @@ export function buildRecommendations({
     const displayQualityByMovie = new Map<number, number>();
     const qualityValues: number[] = [];
     movies.forEach((movie) => {
-        const reviews = reviewsByMovie[movie.id] ?? [];
-        const localAverage =
-            reviews.length > 0
-                ? reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length
-                : null;
-        const baseRating =
-            typeof movie.avgRating === "number" ? movie.avgRating : localAverage;
-        const displayRating = baseRating ?? globalAverage;
-        displayQualityByMovie.set(movie.id, displayRating);
-
-        const wr = imdbWeightedRating(displayRating, movie.voteCount, globalAverage);
-        qualityByMovie.set(movie.id, wr);
-        qualityValues.push(wr);
+        const displayRating =
+            typeof movie.avgRating === "number"
+                ? movie.avgRating
+                : typeof movie.weightedRating === "number"
+                    ? movie.weightedRating
+                    : null;
+        const qualityValue =
+            typeof movie.weightedRating === "number"
+                ? movie.weightedRating
+                : imdbWeightedRating(displayRating ?? undefined, movie.voteCount, globalAverage);
+        qualityByMovie.set(movie.id, qualityValue);
+        displayQualityByMovie.set(movie.id, displayRating ?? globalAverage);
+        qualityValues.push(qualityValue);
     });
     const globalQualityMean =
         qualityValues.length > 0
             ? qualityValues.reduce((sum, value) => sum + value, 0) / qualityValues.length
             : globalAverage;
 
-    const userRatingsByMovie = computeUserRatings(movies, reviewsByMovie, user);
     const userRatingValues = Object.values(userRatingsByMovie);
     const userRatingMean =
         userRatingValues.length > 0
@@ -167,9 +147,22 @@ export function buildRecommendations({
     const directorScores: DirectorScore[] = [];
 
     if (hasPreferenceSignals) {
-        const stats: Record<string, DirectorAccumulator> = {};
+        const stats: Record<
+            string,
+            {
+                likedCount: number;
+                seenCount: number;
+                ratingCount: number;
+                ratingSum: number;
+                likedQualitySum: number;
+                seenQualitySum: number;
+                likedDisplaySum: number;
+                seenDisplaySum: number;
+            }
+        > = {};
+
         movies.forEach((movie) => {
-            const director = movie.director ?? "미상";
+            const director = movie.director || "미상";
             const liked = likedSet.has(movie.id);
             const userRating = userRatingsByMovie[movie.id];
             const seen = liked || typeof userRating === "number";
@@ -256,25 +249,24 @@ export function buildRecommendations({
     const candidateMovies = movies.filter((movie) => !seenMovieIds.has(movie.id));
     const recommendationPool = candidateMovies.length > 0 ? candidateMovies : movies;
 
-    const ranked = recommendationPool
+    const rankedByScore = recommendationPool
         .map((movie) => {
-            const directorScore = directorScoreMap.get(movie.director ?? "") ?? 0;
+            const directorScore = directorScoreMap.get(movie.director) ?? 0;
             const qualityComponent = normalizeQuality(
                 qualityByMovie.get(movie.id) ?? globalQualityMean,
                 globalQualityMean
             );
-            const genreComponent = computeGenreAffinity(movie, selectedGenreSet);
+            const genreComponent = computeGenreAffinity(movie.genres, selectedGenreSet);
 
             const score =
                 RECOMMENDATION_WEIGHTS.director * directorScore +
                 RECOMMENDATION_WEIGHTS.quality * qualityComponent +
                 RECOMMENDATION_WEIGHTS.genre * genreComponent;
 
-            return { movie, score };
+            return { movieId: movie.id, score };
         })
         .sort((a, b) => b.score - a.score)
-        .slice(0, topK)
-        .map((entry) => entry.movie);
+        .slice(0, effectiveTopK);
 
     if (!hasPreferenceSignals) {
         const fallback = movies
@@ -284,15 +276,22 @@ export function buildRecommendations({
                     (qualityByMovie.get(b.id) ?? globalQualityMean) -
                     (qualityByMovie.get(a.id) ?? globalQualityMean)
             )
-            .slice(0, topK);
+            .slice(0, effectiveTopK)
+            .map((movie) => ({
+                movieId: movie.id,
+                score: qualityByMovie.get(movie.id) ?? globalQualityMean,
+            }));
+
         return {
-            recommendedMovies: fallback,
+            rankedMovies: fallback,
             directorScores,
+            hasPreferenceSignals,
         };
     }
 
     return {
-        recommendedMovies: ranked,
+        rankedMovies: rankedByScore,
         directorScores,
+        hasPreferenceSignals,
     };
 }

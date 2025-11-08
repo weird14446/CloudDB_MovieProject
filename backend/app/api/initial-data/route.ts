@@ -2,6 +2,7 @@ import { getPool } from "@/lib/db";
 import { mapMovies } from "@/lib/formatters";
 import { corsJson, corsEmpty } from "@/lib/cors";
 import type { Genre, Review, CastMember } from "@/lib/types";
+import { RATING_STATS_SUBQUERY } from "@/lib/sql";
 
 type ReviewRow = {
   id: number;
@@ -14,13 +15,24 @@ type ReviewRow = {
 
 export async function GET() {
   const pool = getPool();
-
   try {
     const [movieRows] = await pool.query<any[]>(`
-      SELECT m.*, d.name AS director_name, s.avg_rating, s.vote_count, s.weighted_rating
+      SELECT m.*,
+             dir.director_names AS director_name,
+             stats.avg_rating,
+             stats.vote_count,
+             stats.weighted_rating
       FROM movies m
-      LEFT JOIN directors d ON d.id = m.director_id
-      LEFT JOIN movie_rating_stats s ON s.movie_id = m.id
+      LEFT JOIN (
+        SELECT md.movie_id,
+               GROUP_CONCAT(p.name ORDER BY p.name SEPARATOR ', ') AS director_names
+        FROM movie_directors md
+        JOIN people p ON p.id = md.person_id
+        GROUP BY md.movie_id
+      ) dir ON dir.movie_id = m.id
+      LEFT JOIN (
+        ${RATING_STATS_SUBQUERY}
+      ) stats ON stats.movie_id = m.id
       ORDER BY m.year DESC, m.id DESC
       LIMIT 200
     `);

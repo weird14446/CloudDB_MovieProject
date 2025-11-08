@@ -7,10 +7,10 @@ import type {
     Movie,
     Review,
     StreamingPlatform,
+    DirectorScore,
 } from "../types";
 import type { AdminMovieInput } from "../api/adminService";
 import AdminMoviePanel from "../components/AdminMoviePanel";
-import { buildRecommendations } from "../utils/recommendations";
 
 type MovieScreenProps = {
     user: User | null;
@@ -24,6 +24,10 @@ type MovieScreenProps = {
     onLogout: () => void;
     onOpenMovie: (movie: Movie) => void;
     reviewsByMovie: Record<number, Review[]>;
+    recommendedMovies: Movie[];
+    directorScores: DirectorScore[];
+    recommendationsLoading: boolean;
+    recommendationError: string | null;
     isLoading: boolean;
     fetchError: string | null;
     onReloadData: () => void;
@@ -90,6 +94,10 @@ const MovieScreen: React.FC<MovieScreenProps> = ({
     onLogout,
     onOpenMovie,
     reviewsByMovie,
+    recommendedMovies,
+    directorScores,
+    recommendationsLoading,
+    recommendationError,
     isLoading,
     fetchError,
     onReloadData,
@@ -168,18 +176,6 @@ const MovieScreen: React.FC<MovieScreenProps> = ({
         return map;
     }, [movies, avgRatingByMovie]);
 
-    const { recommendedMovies, directorScores } = useMemo(
-        () =>
-            buildRecommendations({
-                movies,
-                likedMovieIds,
-                reviewsByMovie,
-                user,
-                selectedGenres,
-            }),
-        [movies, likedMovieIds, reviewsByMovie, user, selectedGenres]
-    );
-
     const topDirectors = directorScores.slice(0, 3);
     const hasPersonalizedRecommendations = directorScores.length > 0;
     const recommendationTitle = hasPersonalizedRecommendations ? "감독 기반 추천" : "지금 뜨는 영화";
@@ -188,6 +184,10 @@ const MovieScreen: React.FC<MovieScreenProps> = ({
         : user
             ? "좋아요나 리뷰를 남기면 감독 선호도를 분석해 맞춤 추천을 만들어요."
             : "로그인하고 좋아요를 누르면 감독 선호도를 분석해 드려요.";
+    const recommendationSectionVisible =
+        recommendedMovies.length > 0 ||
+        recommendationsLoading ||
+        !!recommendationError;
 
     const popularMovieSet = useMemo(() => {
         const sorted = [...movies].sort((a, b) => {
@@ -617,7 +617,7 @@ const MovieScreen: React.FC<MovieScreenProps> = ({
                 />
             )}
 
-            {recommendedMovies.length > 0 && (
+            {recommendationSectionVisible && (
                 <section className="movie-reco">
                         <div className="movie-reco__header">
                             <div>
@@ -626,7 +626,15 @@ const MovieScreen: React.FC<MovieScreenProps> = ({
                                 <p className="card-subtitle">{recommendationSubtitle}</p>
                             </div>
 
-                            {hasPersonalizedRecommendations && topDirectors[0] ? (
+                            {recommendationsLoading ? (
+                                <div className="pill pill--outline movie-reco__hint">
+                                    맞춤 추천을 계산하는 중입니다...
+                                </div>
+                            ) : recommendationError ? (
+                                <div className="pill pill--outline movie-reco__hint">
+                                    {recommendationError}
+                                </div>
+                            ) : hasPersonalizedRecommendations && topDirectors[0] ? (
                                 <div className="movie-reco__director">
                                     <span className="pill pill--outline">
                                         선호 감독 ·{" "}
@@ -654,9 +662,21 @@ const MovieScreen: React.FC<MovieScreenProps> = ({
                                     </span>
                                 ))}
                             </div>
-                        )}
+                            )}
 
                         <div className="movie-reco__list">
+                            {recommendationsLoading && (
+                                <div className="movie-reco__empty">
+                                    추천 영화를 불러오는 중입니다...
+                                </div>
+                            )}
+                            {!recommendationsLoading &&
+                                !recommendedMovies.length &&
+                                !recommendationError && (
+                                    <div className="movie-reco__empty">
+                                        추천할 영화를 찾지 못했습니다.
+                                    </div>
+                                )}
                             {recommendedMovies.map((movie) => {
                                 const liked = likedMovieIds.includes(movie.id);
                                 const ratingValue = displayRatingByMovie[movie.id];

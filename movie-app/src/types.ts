@@ -69,3 +69,11 @@ export type Review = {
     content: string;
     createdAt: string; // ISO 문자열
 };
+
+export type DirectorScore = {
+    director: string;
+    score: number;
+    likedCount: number;
+    seenCount: number;
+    avgQuality: number;
+};
