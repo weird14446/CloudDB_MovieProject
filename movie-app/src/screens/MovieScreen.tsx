@@ -720,6 +720,9 @@ const MovieScreen: React.FC<MovieScreenProps> = ({
                                                 <span className="pill pill--soft">
                                                     ★ {avgLabel}
                                                 </span>
+                                                <span className="pill pill--soft">
+                                                    ♥ {(movie.likeCount ?? 0).toLocaleString()}
+                                                </span>
                                                 {liked && (
                                                     <span className="pill pill--outline">
                                                         ♥ 좋아요
@@ -803,6 +806,11 @@ const MovieScreen: React.FC<MovieScreenProps> = ({
                                             {m.title}
                                         </h3>
                                         <p className="movie-card__year">{m.year}</p>
+                                        <div className="movie-card__likes">
+                                            <span className="pill pill--soft">
+                                                ♥ {(m.likeCount ?? 0).toLocaleString()}
+                                            </span>
+                                        </div>
                                         <div className="movie-card__genres">
                                             {m.genres.map((g) => (
                                                 <span

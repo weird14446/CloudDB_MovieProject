@@ -358,7 +358,26 @@ const App: React.FC = () => {
         const nextLikes = isLiked
             ? likedMovieIds.filter((id) => id !== movieId)
             : [...likedMovieIds, movieId];
+        const likeDelta = isLiked ? -1 : 1;
         setLikedMovieIds(nextLikes);
+        setMovies((prev) =>
+            prev.map((movie) =>
+                movie.id === movieId
+                    ? {
+                          ...movie,
+                          likeCount: Math.max(0, (movie.likeCount ?? 0) + likeDelta),
+                      }
+                    : movie
+            )
+        );
+        setActiveMovie((prev) =>
+            prev && prev.id === movieId
+                ? {
+                      ...prev,
+                      likeCount: Math.max(0, (prev.likeCount ?? 0) + likeDelta),
+                  }
+                : prev
+        );
 
         void (async () => {
             try {
@@ -370,6 +389,30 @@ const App: React.FC = () => {
             } catch (error) {
                 console.error("[Likes] toggle error", error);
                 setLikedMovieIds(previousLikes);
+                setMovies((prev) =>
+                    prev.map((movie) =>
+                        movie.id === movieId
+                            ? {
+                                  ...movie,
+                                  likeCount: Math.max(
+                                      0,
+                                      (movie.likeCount ?? 0) - likeDelta
+                                  ),
+                              }
+                            : movie
+                    )
+                );
+                setActiveMovie((prev) =>
+                    prev && prev.id === movieId
+                        ? {
+                              ...prev,
+                              likeCount: Math.max(
+                                  0,
+                                  (prev.likeCount ?? 0) - likeDelta
+                              ),
+                          }
+                        : prev
+                );
                 alert("좋아요 처리 중 오류가 발생했습니다.");
             }
         })();

@@ -134,6 +134,7 @@ const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
                 )
                 .join(" · ")
             : "정보 없음";
+    const likeCountLabel = (movie.likeCount ?? 0).toLocaleString();
 
     return (
         <>
@@ -157,6 +158,9 @@ const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
                             {avgRating !== null
                                 ? `★ ${avgRating.toFixed(1)} / 10 · 리뷰 ${reviews.length}개`
                                 : "아직 평균 평점 없음"}
+                        </div>
+                        <div className="pill pill--soft" style={{ fontSize: 12 }}>
+                            ♥ {likeCountLabel}개
                         </div>
                         <button
                             type="button"
@@ -382,7 +386,7 @@ const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
                     >
                         닫기
                     </button>
-                    <div className="trailer-modal__video">
+                    <div className="trailer-modal__frame">
                         <iframe
                             src={trailerSrc}
                             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"

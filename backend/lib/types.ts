@@ -28,6 +28,7 @@ export type Movie = {
   ageRating?: string;
   avgRating?: number;
   voteCount?: number;
+  likeCount?: number;
 };
 
 export type CastMember = {

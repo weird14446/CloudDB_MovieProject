@@ -59,6 +59,7 @@ export type Movie = {
     // 추천 알고리즘용 메타
     avgRating?: number; // 외부 평균 평점 (0~10 가정)
     voteCount?: number; // 평점 참여 수
+    likeCount?: number; // 총 좋아요 수
 };
 
 export type Review = {

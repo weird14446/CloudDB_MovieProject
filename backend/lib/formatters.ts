@@ -19,6 +19,7 @@ type RawMovieRow = {
     vote_count: number | null;
     weighted_rating: number | null;
     director_name: string | null;
+    like_count?: number | null;
 };
 
 export function mapMovies(
@@ -44,6 +45,7 @@ export function mapMovies(
         ageRating: row.age_rating ?? undefined,
         avgRating: row.weighted_rating ?? row.avg_rating ?? undefined,
         voteCount: row.vote_count ?? undefined,
+        likeCount: row.like_count ?? 0,
         director: row.director_name ?? "미상",
         genres: genresByMovie[row.id] ?? [],
         streamingPlatforms: platformsByMovie[row.id] ?? [],

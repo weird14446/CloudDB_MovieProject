@@ -157,7 +157,8 @@ async function fetchMovie(
                dir.director_names AS director_name,
                s.avg_rating,
                s.vote_count,
-               s.weighted_rating
+               s.weighted_rating,
+               COALESCE(likes.like_count, 0) AS like_count
         FROM movies m
         LEFT JOIN (
             SELECT md.movie_id,
@@ -169,6 +170,11 @@ async function fetchMovie(
         LEFT JOIN (
             ${RATING_STATS_SUBQUERY}
         ) s ON s.movie_id = m.id
+        LEFT JOIN (
+            SELECT movie_id, COUNT(*) AS like_count
+            FROM likes
+            GROUP BY movie_id
+        ) likes ON likes.movie_id = m.id
         WHERE m.id = ?
         LIMIT 1
     `,

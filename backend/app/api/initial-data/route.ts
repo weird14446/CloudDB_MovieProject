@@ -21,7 +21,8 @@ export async function GET() {
              dir.director_names AS director_name,
              stats.avg_rating,
              stats.vote_count,
-             stats.weighted_rating
+             stats.weighted_rating,
+             COALESCE(likes.like_count, 0) AS like_count
       FROM movies m
       LEFT JOIN (
         SELECT md.movie_id,
@@ -33,6 +34,11 @@ export async function GET() {
       LEFT JOIN (
         ${RATING_STATS_SUBQUERY}
       ) stats ON stats.movie_id = m.id
+      LEFT JOIN (
+        SELECT movie_id, COUNT(*) AS like_count
+        FROM likes
+        GROUP BY movie_id
+      ) likes ON likes.movie_id = m.id
       ORDER BY m.year DESC, m.id DESC
       LIMIT 200
     `);
