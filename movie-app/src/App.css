@@ -473,6 +473,45 @@ body {
   margin: 0;
 }
 
+.movie-main__filter-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.movie-main__filter-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.movie-main__count-pill {
+  flex: 0 0 auto;
+}
+
+.movie-main__filter-select {
+  flex: 1 1 150px;
+  min-width: 140px;
+}
+
+@media (max-width: 640px) {
+  .movie-main__filter-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .movie-main__count-pill {
+    width: 100%;
+    text-align: center;
+  }
+
+  .movie-main__filter-select {
+    width: 100%;
+  }
+}
+
 .admin-panel {
   margin: 1.25rem 0 1.5rem;
   padding: 1.25rem 1.5rem 1.5rem;

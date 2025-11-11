@@ -566,29 +566,14 @@ const MovieScreen: React.FC<MovieScreenProps> = ({
 
                         {/* 오른쪽: 총 개수 + 검색창 + 상태/플랫폼 필터 */}
                         <div className="movie-main__header-right">
-                            <div
-                                style={{
-                                    display: "flex",
-                                    flexDirection: "column",
-                                    gap: 6,
-                                    width: "100%",
-                                }}
-                            >
-                                <div
-                                    style={{
-                                        display: "flex",
-                                        alignItems: "center",
-                                        justifyContent: "space-between",
-                                        gap: 8,
-                                    }}
-                                >
-                                    <div className="pill pill--outline">
+                            <div className="movie-main__filter-panel">
+                                <div className="movie-main__filter-controls">
+                                    <div className="pill pill--outline movie-main__count-pill">
                                         총 <strong>{visibleMovies.length}</strong> 편
                                     </div>
 
                                     <select
-                                        className="form-input"
-                                        style={{ maxWidth: 180 }}
+                                        className="form-input movie-main__filter-select"
                                         value={statusFilter}
                                         onChange={(e) =>
                                             setStatusFilter(e.target.value)
@@ -605,8 +590,7 @@ const MovieScreen: React.FC<MovieScreenProps> = ({
                                     </select>
 
                                     <select
-                                        className="form-input"
-                                        style={{ maxWidth: 200 }}
+                                        className="form-input movie-main__filter-select"
                                         value={platformFilter}
                                         onChange={(e) =>
                                             setPlatformFilter(
@@ -626,8 +610,7 @@ const MovieScreen: React.FC<MovieScreenProps> = ({
                                     </select>
 
                                     <select
-                                        className="form-input"
-                                        style={{ maxWidth: 180 }}
+                                        className="form-input movie-main__filter-select"
                                         value={directorFilter}
                                         onChange={(e) =>
                                             setDirectorFilter(e.target.value)
@@ -642,8 +625,7 @@ const MovieScreen: React.FC<MovieScreenProps> = ({
                                     </select>
 
                                     <select
-                                        className="form-input"
-                                        style={{ maxWidth: 160 }}
+                                        className="form-input movie-main__filter-select"
                                         value={ratingFilter}
                                         onChange={(e) => setRatingFilter(e.target.value)}
                                     >
