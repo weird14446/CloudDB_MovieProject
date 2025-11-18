@@ -1,27 +1,56 @@
-# CloudDB_MovieProject
-대학 프로젝트 과제
+# FilmNavi (CloudDB Movie Project)
+영화 데이터를 모아서 추천/리뷰/좋아요를 제공하는 풀스택 데모입니다. Next.js 기반 백엔드(API)와 Vite + React 프론트엔드, MySQL을 사용합니다.
 
-## Docker로 실행하기
+## 기술 스택
+- Backend: Next.js 14 (App Router), TypeScript, mysql2
+- Frontend: React + Vite + TypeScript
+- DB: MySQL 8
+- 배포/개발: Docker Compose, VS Code Dev Container
 
-1. 루트에 있는 `docker-compose.yml`을 사용합니다. 필요한 경우 TMDB API 키나 관리자 토큰을 쉘 환경 변수로 세팅하세요.  
+## 빠르게 실행하기 (Docker Compose)
+1. TMDB API 키를 준비하고 필요한 환경 변수를 셋업합니다.
    ```bash
    export TMDB_API_KEY=<TMDB에서 발급받은 키>
-   export ADMIN_IMPORT_TOKEN=root-import
+   export ADMIN_IMPORT_TOKEN=root-import   # 선택, 기본값 동일
    ```
-2. 컨테이너 빌드 및 실행
+2. 빌드 및 실행:
    ```bash
    docker compose build
    docker compose up -d
    ```
-3. 접속 포트
+3. 접속:
    - 프론트엔드: http://localhost:8080
    - 백엔드 API: http://localhost:3000
-   - MySQL: 포트 3307 (계정: `movieapp`/`moviepass`, DB: `movieapp`)
+   - MySQL: 포트 3307 (계정 `movieapp` / `moviepass`, DB `movieapp`)
+4. DB 초기화: 컨테이너에 들어가 필요한 스키마/데이터를 직접 주입합니다.
+   ```bash
+   docker compose exec db bash
+   mysql -u movieapp -pmoviepass movieapp < your_dump.sql
+   ```
+   참고 스크립트: `backend/sql` (제약 추가, 기본 사용자 등).
 
-> 초기 스키마/데이터는 MySQL 내부에 직접 로딩해야 합니다. `docker compose exec db bash` 후 필요한 SQL을 실행하거나, 덤프 파일을 `mysql -hmysql -u movieapp -p movieapp < your_dump.sql` 형태로 주입하세요. (필요 시 `backend/sql`의 스크립트를 참고하면 됩니다.)
+## 로컬 개발 (컨테이너 없이)
+- Backend:
+  ```bash
+  cd backend
+  npm install
+  DB_HOST=localhost DB_USER=movieapp DB_PASSWORD=moviepass DB_NAME=movieapp \
+  TMDB_API_KEY=<키> ADMIN_IMPORT_TOKEN=root-import npm run dev
+  ```
+- Frontend:
+  ```bash
+  cd movie-app
+  npm install
+  VITE_API_BASE_URL=http://localhost:3000/api \
+  VITE_TMDB_API_KEY=<키> \
+  VITE_ADMIN_IMPORT_TOKEN=root-import \
+  npm run dev -- --host --port 5173
+  ```
 
-## Dev Container에서 개발하기 (VS Code)
+## VS Code Dev Container
+`Dev Containers: Reopen in Container`로 열면 `.devcontainer/docker-compose.dev.yml` 기반 환경이 올라갑니다. 포트(3000, 5173, 8080, 3307)가 호스트로 포워딩되며 `postCreateCommand`가 두 패키지 의존성을 설치합니다.
 
-1. VS Code에서 `Open Folder in Container` 실행하면 `.devcontainer/docker-compose.dev.yml`이 올라가며 `devcontainer` 서비스로 접속합니다.
-2. 기본으로 DB가 포함되어 있으며 포트는 3000(backend), 5173(Vite), 8080(frontend), 3307(MySQL)을 호스트로 포워딩합니다.
-3. 컨테이너 생성 후 `postCreateCommand`가 backend와 movie-app 의존성을 설치합니다. 추가 스크립트가 필요하면 `.devcontainer/devcontainer.json`을 수정하세요.
+## 주요 환경 변수
+- 공통: `TMDB_API_KEY` (필수), `ADMIN_IMPORT_TOKEN` (관리용 토큰, 기본 `root-import`)
+- 백엔드: `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`
+- 프론트엔드(Vite): `VITE_API_BASE_URL` (기본 `/api`), `VITE_TMDB_API_KEY`, `VITE_ADMIN_IMPORT_TOKEN`
