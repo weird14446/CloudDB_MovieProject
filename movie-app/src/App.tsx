@@ -8,6 +8,7 @@ import GenreScreen from "./screens/GenreScreen";
 import MovieScreen from "./screens/MovieScreen";
 import MovieDetailModal from "./components/MovieDetailModal";
 import MyPageScreen from "./screens/MyPageScreen";
+import ChatWidget from "./components/ChatWidget";
 import type { User, Genre, Movie, Review, DirectorScore } from "./types";
 import { fetchInitialData } from "./api/dataService";
 import { checkDbHealth } from "./api/health";
@@ -338,8 +339,8 @@ const App: React.FC = () => {
                 if (!response.ok || !response.review) {
                     const message =
                         response.message &&
-                        (response.message.includes("이미") ||
-                            response.message.includes("작성"))
+                            (response.message.includes("이미") ||
+                                response.message.includes("작성"))
                             ? "리뷰는 한 번만 작성할 수 있습니다."
                             : response.message ?? "리뷰 등록에 실패했습니다.";
                     alert(message);
@@ -354,7 +355,7 @@ const App: React.FC = () => {
                 console.error("[Review] error", error);
                 const message =
                     error instanceof Error &&
-                    (error.message.includes("이미") || error.message.includes("작성"))
+                        (error.message.includes("이미") || error.message.includes("작성"))
                         ? "리뷰는 한 번만 작성할 수 있습니다."
                         : "리뷰 등록에 실패했습니다.";
                 alert(message);
@@ -379,18 +380,18 @@ const App: React.FC = () => {
             prev.map((movie) =>
                 movie.id === movieId
                     ? {
-                          ...movie,
-                          likeCount: Math.max(0, (movie.likeCount ?? 0) + likeDelta),
-                      }
+                        ...movie,
+                        likeCount: Math.max(0, (movie.likeCount ?? 0) + likeDelta),
+                    }
                     : movie
             )
         );
         setActiveMovie((prev) =>
             prev && prev.id === movieId
                 ? {
-                      ...prev,
-                      likeCount: Math.max(0, (prev.likeCount ?? 0) + likeDelta),
-                  }
+                    ...prev,
+                    likeCount: Math.max(0, (prev.likeCount ?? 0) + likeDelta),
+                }
                 : prev
         );
 
@@ -408,24 +409,24 @@ const App: React.FC = () => {
                     prev.map((movie) =>
                         movie.id === movieId
                             ? {
-                                  ...movie,
-                                  likeCount: Math.max(
-                                      0,
-                                      (movie.likeCount ?? 0) - likeDelta
-                                  ),
-                              }
+                                ...movie,
+                                likeCount: Math.max(
+                                    0,
+                                    (movie.likeCount ?? 0) - likeDelta
+                                ),
+                            }
                             : movie
                     )
                 );
                 setActiveMovie((prev) =>
                     prev && prev.id === movieId
                         ? {
-                              ...prev,
-                              likeCount: Math.max(
-                                  0,
-                                  (prev.likeCount ?? 0) - likeDelta
-                              ),
-                          }
+                            ...prev,
+                            likeCount: Math.max(
+                                0,
+                                (prev.likeCount ?? 0) - likeDelta
+                            ),
+                        }
                         : prev
                 );
                 alert("좋아요 처리 중 오류가 발생했습니다.");
@@ -786,6 +787,8 @@ const App: React.FC = () => {
                     onClose={() => setShowGenres(false)}
                 />
             )}
+
+            <ChatWidget />
 
             {activeMovie && (
                 <MovieDetailModal
