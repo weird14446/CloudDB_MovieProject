@@ -27,6 +27,7 @@ services:
       DB_USER: movieapp
       DB_PASSWORD: moviepass
       DB_NAME: movieapp
+      PORT: 3000
       TMDB_API_KEY: ${TMDB_API_KEY:-}
       ADMIN_IMPORT_TOKEN: ${ADMIN_IMPORT_TOKEN:-root-import}
       NEXT_TELEMETRY_DISABLED: "1"

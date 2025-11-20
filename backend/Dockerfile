@@ -1,5 +1,6 @@
-FROM node:20-alpine AS base
+FROM node:25-alpine AS base
 WORKDIR /app
+RUN npm install -g npm@11.6.3
 
 FROM base AS deps
 COPY package*.json ./
@@ -22,5 +23,6 @@ COPY --from=builder /app/app ./app
 COPY --from=builder /app/lib ./lib
 COPY --from=builder /app/next.config.mjs ./next.config.mjs
 
+ENV PORT=3000
 EXPOSE 3000
 CMD ["npm", "run", "start"]

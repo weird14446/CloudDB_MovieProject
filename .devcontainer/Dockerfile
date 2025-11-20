@@ -1,5 +1,6 @@
-FROM mcr.microsoft.com/vscode/devcontainers/typescript-node:20
+FROM node:25
 
+RUN npm install -g npm@11.6.3
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         default-mysql-client \
