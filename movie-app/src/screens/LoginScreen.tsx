@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { login as requestLogin } from "../api/authService";
+import { getGoogleAuthUrl } from "../api/oauthService";
 
 type AuthCallbackPayload = {
     name: string;
@@ -45,6 +46,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
     const [pw, setPw] = useState<string>("");
     const [error, setError] = useState<string | null>(null);
     const [busy, setBusy] = useState<boolean>(false);
+    const [oauthBusy, setOauthBusy] = useState<boolean>(false);
 
     async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
         e.preventDefault();
@@ -87,6 +89,74 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
             setError(msg);
         } finally {
             setBusy(false);
+        }
+    }
+
+    async function handleGoogleLogin() {
+        setError(null);
+        setOauthBusy(true);
+        try {
+            const origin = typeof window !== "undefined" ? window.location.origin : undefined;
+            const response = await getGoogleAuthUrl(origin);
+            if (!response.ok || !response.authUrl) {
+                setError(response.message ?? "Google 로그인 URL을 만들지 못했습니다.");
+                setOauthBusy(false);
+                return;
+            }
+
+            const popup = window.open(
+                response.authUrl,
+                "oauth-google",
+                "width=500,height=650"
+            );
+            if (!popup) {
+                setError("팝업을 열 수 없습니다. 팝업 차단을 해제해주세요.");
+                setOauthBusy(false);
+                return;
+            }
+
+            const timer = setInterval(() => {
+                if (popup.closed) {
+                    clearInterval(timer);
+                    setOauthBusy(false);
+                }
+            }, 500);
+
+            const listener = (event: MessageEvent) => {
+                const data = event.data;
+                if (!data || data.type !== "oauth-google") return;
+                window.removeEventListener("message", listener);
+                clearInterval(timer);
+                setOauthBusy(false);
+                popup.close();
+
+                if (!data.ok || !data.user) {
+                    setError(data.message ?? "Google 로그인에 실패했습니다.");
+                    return;
+                }
+
+                Promise.resolve(
+                    onLogin({
+                        name: data.user.name,
+                        email: data.user.email,
+                        password: "",
+                        userId: data.user.id,
+                    })
+                ).catch((err) => {
+                    const msg =
+                        err instanceof Error
+                            ? err.message
+                            : "로그인 처리 중 오류가 발생했습니다.";
+                    setError(msg);
+                });
+            };
+
+            window.addEventListener("message", listener);
+        } catch (err) {
+            const msg =
+                err instanceof Error ? err.message : "Google 로그인에 실패했습니다.";
+            setError(msg);
+            setOauthBusy(false);
         }
     }
 
@@ -142,6 +212,16 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
 
                     <button className="btn btn--primary" disabled={busy}>
                         {busy ? "로그인 중..." : "로그인"}
+                    </button>
+
+                    <button
+                        type="button"
+                        className="btn btn--ghost"
+                        onClick={handleGoogleLogin}
+                        disabled={oauthBusy}
+                        style={{ marginTop: 8 }}
+                    >
+                        {oauthBusy ? "Google 로그인 중..." : "Google로 로그인"}
                     </button>
 
                     <p className="form-hint" style={{ marginTop: 8, textAlign: "center" }}>

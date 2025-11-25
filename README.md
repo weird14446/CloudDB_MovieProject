@@ -39,14 +39,14 @@
   ```bash
   cd backend
   npm install
-  DB_HOST=localhost DB_USER=movieapp DB_PASSWORD=moviepass DB_NAME=movieapp \
+  PORT=4000 DB_HOST=localhost DB_USER=movieapp DB_PASSWORD=moviepass DB_NAME=movieapp \
   TMDB_API_KEY=<키> ADMIN_IMPORT_TOKEN=root-import npm run dev
   ```
 - Frontend:
   ```bash
   cd movie-app
   npm install
-  VITE_API_BASE_URL=http://localhost:3000/api \
+  VITE_API_BASE_URL=http://localhost:4000/api \
   VITE_TMDB_API_KEY=<키> \
   VITE_ADMIN_IMPORT_TOKEN=root-import \
   npm run dev -- --host --port 5173
@@ -59,3 +59,4 @@
 - 공통: `TMDB_API_KEY` (필수), `ADMIN_IMPORT_TOKEN` (관리용 토큰, 기본 `root-import`)
 - 백엔드(필수): `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`  ← RDS 엔드포인트/계정 정보
 - 프론트엔드(Vite): `VITE_API_BASE_URL` (기본 `/api`), `VITE_TMDB_API_KEY`, `VITE_ADMIN_IMPORT_TOKEN`
+- 소셜 로그인(Google): `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` (예: `http://localhost:4000/api/auth/oauth/google/callback`), `OAUTH_STATE_SECRET`(선택, 기본값 있음)
