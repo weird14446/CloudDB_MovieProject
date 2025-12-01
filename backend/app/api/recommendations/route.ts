@@ -1,226 +1,159 @@
 import { corsJson, corsEmpty } from "@/lib/cors";
 import { withConnection } from "@/lib/db";
-import {
-    computeRecommendationRanking,
-    type RecommendationMovieInput,
-} from "@/lib/recommendations";
-import { RATING_STATS_SUBQUERY } from "@/lib/sql";
-import type { PoolConnection } from "mysql2/promise";
+import { recommendationModel } from "@/lib/integrated-model";
+import type { Movie, Review } from "@/lib/types";
+import type { RowDataPacket } from "mysql2";
 
 type RecommendationRequestBody = {
-    userId?: number;
-    selectedGenres?: string[];
-    topK?: number;
+  userId?: number;
+  topK?: number;
 };
 
-type MovieRow = {
-    id: number;
-    director_name: string | null;
-    avg_rating: number | null;
-    vote_count: number | null;
-    weighted_rating: number | null;
+type DbMovieRow = {
+  id: number;
+  title: string;
+  genres_str: string | null;
+  director_name: string | null;
+  cast_ids: string | null;
 };
 
-function toSlug(value: string): string {
-    return (
-        value
-            ?.trim()
-            .toLowerCase()
-            .replace(/[^a-z0-9가-힣\s-]/g, "")
-            .replace(/\s+/g, "-") ?? ""
-    );
-}
+type DbReviewRow = {
+  user_id: number;
+  movie_id: number;
+  rating: number;
+};
 
-function sanitizeGenreSlugs(values: unknown): string[] {
-    if (!Array.isArray(values)) return [];
-    const result = new Set<string>();
-    values.forEach((value) => {
-        if (typeof value !== "string") return;
-        const slug = toSlug(value);
-        if (slug) {
-            result.add(slug);
-        }
-    });
-    return Array.from(result);
-}
+type DbLikeRow = {
+  user_id: number;
+  movie_id: number;
+};
 
-async function loadPreferredGenreSlugs(
-    conn: PoolConnection,
-    userId: number
-): Promise<string[]> {
-    const [rows] = await conn.query<{ name: string }[]>(
-        `
-        SELECT g.name
-        FROM user_preferred_genres upg
-        JOIN genres g ON g.id = upg.genre_id
-        WHERE upg.user_id = ?
-    `,
-        [userId]
-    );
-    const unique = new Set<string>();
-    rows.forEach((row) => {
-        const slug = toSlug(row.name);
-        if (slug) {
-            unique.add(slug);
-        }
-    });
-    return Array.from(unique);
+function mapRowsToMovies(rows: DbMovieRow[]): Movie[] {
+  return rows.map((row) => ({
+    id: row.id,
+    title: row.title,
+    year: 0, // 통합 모델은 연도를 사용하지 않음
+    director: row.director_name ?? "미상",
+    genres: row.genres_str ? row.genres_str.split(",") : [],
+    cast: row.cast_ids
+      ? row.cast_ids.split(",").map((id) => ({ id: Number(id), name: "" }))
+      : [],
+  }));
 }
 
 export async function POST(request: Request) {
-    let body: RecommendationRequestBody = {};
-    try {
-        body = (await request.json()) ?? {};
-    } catch {
-        body = {};
-    }
+  let body: RecommendationRequestBody = {};
+  try {
+    body = (await request.json()) ?? {};
+  } catch {
+    body = {};
+  }
 
-    const userId = typeof body.userId === "number" ? body.userId : null;
-    const requestedGenres = sanitizeGenreSlugs(body.selectedGenres);
-    const requestedTopK =
-        typeof body.topK === "number" && Number.isFinite(body.topK)
-            ? Math.round(body.topK)
-            : 6;
+  const userId = typeof body.userId === "number" ? body.userId : null;
+  const topK = typeof body.topK === "number" && Number.isFinite(body.topK) ? body.topK : 6;
 
-    try {
-        const response = await withConnection(async (conn) => {
-            const [movieRows] = await conn.query<MovieRow[]>(
-                `
-                SELECT m.id,
-                       dir.director_names AS director_name,
-                       stats.avg_rating,
-                       stats.vote_count,
-                       stats.weighted_rating
-                FROM movies m
-                LEFT JOIN (
-                    SELECT md.movie_id,
-                           GROUP_CONCAT(p.name ORDER BY p.name SEPARATOR ', ') AS director_names
-                    FROM movie_directors md
-                    JOIN people p ON p.id = md.person_id
-                    GROUP BY md.movie_id
-                ) dir ON dir.movie_id = m.id
-                LEFT JOIN (
-                    ${RATING_STATS_SUBQUERY}
-                ) stats ON stats.movie_id = m.id
-                ORDER BY m.year DESC, m.id DESC
-                LIMIT 300
-            `
-            );
+  try {
+    const result = await withConnection(async (conn) => {
+      // 1) 영화 메타데이터
+      const [movieRows] = await conn.query<(DbMovieRow & RowDataPacket)[]>(`
+        SELECT m.id, m.title,
+               (SELECT GROUP_CONCAT(g.name SEPARATOR ',')
+                FROM movie_genres mg
+                JOIN genres g ON mg.genre_id = g.id
+                WHERE mg.movie_id = m.id) AS genres_str,
+               (SELECT p.name
+                FROM movie_directors md
+                JOIN people p ON md.person_id = p.id
+                WHERE md.movie_id = m.id
+                LIMIT 1) AS director_name,
+               (SELECT GROUP_CONCAT(person_id SEPARATOR ',')
+                FROM movie_cast mc
+                WHERE mc.movie_id = m.id
+                ORDER BY cast_order
+                LIMIT 3) AS cast_ids
+        FROM movies m
+        ORDER BY m.id DESC
+        LIMIT 400
+      `);
+      const movies = mapRowsToMovies(movieRows);
 
-            if (!movieRows.length) {
-                return {
-                    recommendations: [],
-                    directorScores: [],
-                };
-            }
+      // 2) 평점(명시적 피드백)
+      const [reviewRows] = await conn.query<(DbReviewRow & RowDataPacket)[]>(`
+        SELECT user_id, movie_id, rating
+        FROM reviews
+        WHERE status = 'active'
+      `);
+      const reviews: Review[] = reviewRows.map((r) => ({
+        id: 0,
+        movieId: r.movie_id,
+        userId: r.user_id,
+        rating: r.rating,
+        userName: "",
+        content: "",
+        createdAt: "",
+      }));
 
-            const movieIds = movieRows.map((row) => Number(row.id));
-            let genreRows: { movie_id: number; name: string }[] = [];
-            if (movieIds.length > 0) {
-                const [rows] = await conn.query<{ movie_id: number; name: string }[]>(
-                    `
-                    SELECT mg.movie_id, g.name
-                    FROM movie_genres mg
-                    JOIN genres g ON g.id = mg.genre_id
-                    WHERE mg.movie_id IN (?)
-                `,
-                    [movieIds]
-                );
-                genreRows = rows;
-            }
+      // 3) 좋아요(암묵적 피드백)
+      const [likeRows] = await conn.query<(DbLikeRow & RowDataPacket)[]>(`
+        SELECT user_id, movie_id FROM likes
+      `);
+      const likes = likeRows.map((l) => ({
+        userId: l.user_id,
+        movieId: l.movie_id,
+      }));
 
-            const genresByMovie = genreRows.reduce<Record<number, string[]>>(
-                (acc, row) => {
-                    const movieId = Number(row.movie_id);
-                    const list = acc[movieId] ?? [];
-                    const slug = toSlug(row.name);
-                    if (slug) {
-                        list.push(slug);
-                        acc[movieId] = list;
-                    }
-                    return acc;
-                },
-                {}
-            );
+      // 4) 모델 초기화 및 학습 (데모: 요청마다 수행)
+      recommendationModel.initialize(movies, reviews, likes);
+      recommendationModel.train(reviews);
 
-            let likedMovieIds: number[] = [];
-            const userRatingsByMovie: Record<number, number> = {};
+      // 5) 예측
+      const scores: { movieId: number; score: number }[] = [];
+      const seen = new Set<number>();
+      if (userId) {
+        reviews.filter((r) => r.userId === userId).forEach((r) => seen.add(r.movieId));
+        likes.filter((l) => l.userId === userId).forEach((l) => seen.add(l.movieId));
+      }
 
-            if (userId) {
-                const [likeRows] = await conn.query<{ movie_id: number }[]>(
-                    "SELECT movie_id FROM likes WHERE user_id = ?",
-                    [userId]
-                );
-                likedMovieIds = likeRows.map((row) => Number(row.movie_id));
+      for (const movie of movies) {
+        if (userId && seen.has(movie.id)) continue; // 이미 본 영화 제외
+        const score = recommendationModel.predict(userId ?? -1, movie.id);
+        scores.push({ movieId: movie.id, score });
+      }
 
-                const [ratingRows] = await conn.query<
-                    { movie_id: number; rating: number }[]
-                >(
-                    `
-                    SELECT movie_id, rating
-                    FROM reviews
-                    WHERE user_id = ? AND status = 'active'
-                `,
-                    [userId]
-                );
-                ratingRows.forEach((row) => {
-                    userRatingsByMovie[Number(row.movie_id)] = Number(row.rating);
-                });
-            }
+      scores.sort((a, b) => b.score - a.score);
+      const topScores = scores.slice(0, Math.max(1, topK));
 
-            let selectedGenres = requestedGenres;
-            if (!selectedGenres.length && userId) {
-                selectedGenres = await loadPreferredGenreSlugs(conn, userId);
-            }
+      // 디버그용 로그: 예측 결과
+      console.log("[recommendations] predict", {
+        userId: userId ?? null,
+        candidates: scores.length,
+        topK: topScores.length,
+        samples: topScores.slice(0, 6), // 상위 일부만 출력
+      });
 
-            const moviesForRanking: RecommendationMovieInput[] = movieRows.map(
-                (row) => {
-                    const movieId = Number(row.id);
-                    return {
-                        id: movieId,
-                        director: row.director_name ?? "미상",
-                        genres: genresByMovie[movieId] ?? [],
-                        avgRating:
-                            row.avg_rating != null ? Number(row.avg_rating) : null,
-                        voteCount:
-                            row.vote_count != null ? Number(row.vote_count) : null,
-                        weightedRating:
-                            row.weighted_rating != null
-                                ? Number(row.weighted_rating)
-                                : null,
-                    };
-                }
-            );
+      return topScores;
+    });
 
-            return computeRecommendationRanking({
-                movies: moviesForRanking,
-                likedMovieIds,
-                userRatingsByMovie,
-                selectedGenres,
-                topK: requestedTopK,
-            });
-        });
-
-        return corsJson({
-            ok: true,
-            recommendations: response.rankedMovies,
-            directorScores: response.directorScores,
-        });
-    } catch (error) {
-        console.error("[recommendations] error", error);
-        return corsJson(
-            {
-                ok: false,
-                message:
-                    error instanceof Error
-                        ? error.message
-                        : "추천 정보를 계산하지 못했습니다.",
-            },
-            { status: 500 }
-        );
-    }
+    return corsJson({
+      ok: true,
+      recommendations: result,
+      directorScores: [],
+    });
+  } catch (error) {
+    console.error("[recommendations] error", error);
+    return corsJson(
+      {
+        ok: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : "추천 정보를 계산하지 못했습니다.",
+      },
+      { status: 500 }
+    );
+  }
 }
 
 export function OPTIONS() {
-    return corsEmpty();
+  return corsEmpty();
 }

@@ -1,6 +1,8 @@
 import mysql, { Pool, PoolOptions } from "mysql2/promise";
 
-let pool: Pool | null = null;
+// Next.js dev 환경(HMR)에서도 하나의 풀을 재사용하기 위해 globalThis에 저장
+const globalForPool = globalThis as unknown as { __filmNaviPool?: Pool };
+let pool: Pool | null = globalForPool.__filmNaviPool ?? null;
 
 function getConfig(): PoolOptions {
   const { DB_HOST, DB_USER, DB_PASSWORD, DB_NAME } = process.env;
@@ -23,6 +25,8 @@ function getConfig(): PoolOptions {
 export function getPool(): Pool {
   if (!pool) {
     pool = mysql.createPool(getConfig());
+    // HMR 시 풀 중복 생성을 방지
+    globalForPool.__filmNaviPool = pool;
   }
   return pool;
 }

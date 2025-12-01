@@ -719,6 +719,7 @@ const App: React.FC = () => {
                         onOpenMovie={handleOpenMovie}
                         reviewsByMovie={reviewsByMovie}
                         recommendedMovies={recommendedMovies}
+                        recommendationScores={recommendationScores}
                         directorScores={directorScores}
                         recommendationsLoading={recommendationsLoading}
                         recommendationError={recommendationsError}

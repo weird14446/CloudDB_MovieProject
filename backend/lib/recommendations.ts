@@ -22,6 +22,7 @@ export type RecommendationMovieInput = {
     avgRating: number | null;
     voteCount: number | null;
     weightedRating: number | null;
+    likeCount?: number | null;
 };
 
 export type RecommendationMovieScore = {
@@ -246,6 +247,51 @@ export function computeRecommendationRanking({
     const directorScoreMap = new Map<string, number>();
     directorScores.forEach((item) => directorScoreMap.set(item.director, item.score));
 
+    // 사용자 콘텐츠/감독 선호 프로파일
+    const genreFrequency = new Map<string, number>();
+    const directorFrequency = new Map<string, number>();
+    const interactionIds = new Set<number>(likedMovieIds);
+    Object.keys(userRatingsByMovie).forEach((movieId) =>
+        interactionIds.add(Number(movieId))
+    );
+
+    movies.forEach((movie) => {
+        if (!interactionIds.has(movie.id)) return;
+        movie.genres.forEach((g) => {
+            genreFrequency.set(g, (genreFrequency.get(g) ?? 0) + 1);
+        });
+        const dir = movie.director || "미상";
+        directorFrequency.set(dir, (directorFrequency.get(dir) ?? 0) + 1);
+    });
+
+    const totalGenreSignals = Array.from(genreFrequency.values()).reduce((a, b) => a + b, 0);
+    const totalDirectorSignals = Array.from(directorFrequency.values()).reduce(
+        (a, b) => a + b,
+        0
+    );
+
+    function contentAffinity(movie: RecommendationMovieInput): number {
+        const genreScore =
+            totalGenreSignals > 0
+                ? movie.genres.reduce(
+                      (sum, g) => sum + (genreFrequency.get(g) ?? 0) / totalGenreSignals,
+                      0
+                  ) / Math.max(1, movie.genres.length)
+                : 0;
+        const directorScore =
+            totalDirectorSignals > 0
+                ? (directorFrequency.get(movie.director) ?? 0) / totalDirectorSignals
+                : 0;
+        // 콘텐츠 기반 가중치: 장르 0.6, 감독 0.4
+        return 0.6 * genreScore + 0.4 * directorScore;
+    }
+
+    // 인기 보정
+    const maxLike = movies.reduce(
+        (max, m) => Math.max(max, Number(m.likeCount ?? 0)),
+        0
+    );
+
     const candidateMovies = movies.filter((movie) => !seenMovieIds.has(movie.id));
     const recommendationPool = candidateMovies.length > 0 ? candidateMovies : movies;
 
@@ -257,11 +303,16 @@ export function computeRecommendationRanking({
                 globalQualityMean
             );
             const genreComponent = computeGenreAffinity(movie.genres, selectedGenreSet);
+            const contentComponent = contentAffinity(movie);
+            const popularityComponent =
+                maxLike > 0 ? Math.log1p(Number(movie.likeCount ?? 0)) / Math.log1p(maxLike) : 0;
 
             const score =
                 RECOMMENDATION_WEIGHTS.director * directorScore +
                 RECOMMENDATION_WEIGHTS.quality * qualityComponent +
-                RECOMMENDATION_WEIGHTS.genre * genreComponent;
+                RECOMMENDATION_WEIGHTS.genre * genreComponent +
+                0.35 * contentComponent +
+                0.15 * popularityComponent;
 
             return { movieId: movie.id, score };
         })

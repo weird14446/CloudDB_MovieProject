@@ -9,6 +9,7 @@ import type {
     StreamingPlatform,
     DirectorScore,
 } from "../types";
+import type { RecommendationMovieScore } from "../api/recommendationService";
 import type { AdminMovieInput } from "../api/adminService";
 import AdminMoviePanel from "../components/AdminMoviePanel";
 
@@ -26,6 +27,7 @@ type MovieScreenProps = {
     onOpenMovie: (movie: Movie) => void;
     reviewsByMovie: Record<number, Review[]>;
     recommendedMovies: Movie[];
+    recommendationScores: RecommendationMovieScore[];
     directorScores: DirectorScore[];
     recommendationsLoading: boolean;
     recommendationError: string | null;
@@ -97,6 +99,7 @@ const MovieScreen: React.FC<MovieScreenProps> = ({
     onOpenMovie,
     reviewsByMovie,
     recommendedMovies,
+    recommendationScores,
     directorScores,
     recommendationsLoading,
     recommendationError,
@@ -117,6 +120,14 @@ const MovieScreen: React.FC<MovieScreenProps> = ({
     onRefreshMovies,
     isRefreshingMovies,
 }) => {
+    const recoScoreMap = useMemo(() => {
+        const map = new Map<number, number>();
+        recommendationScores.forEach(({ movieId, score }) =>
+            map.set(movieId, score)
+        );
+        return map;
+    }, [recommendationScores]);
+
     // 🔎 검색어
     const [searchQuery, setSearchQuery] = useState<string>("");
 
@@ -743,9 +754,9 @@ const MovieScreen: React.FC<MovieScreenProps> = ({
                                     <button
                                         key={movie.id}
                                         type="button"
-                                        className="movie-reco-card"
-                                        onClick={() => onOpenMovie(movie)}
-                                    >
+                                className="movie-reco-card"
+                                onClick={() => onOpenMovie(movie)}
+                            >
                                         <div
                                             className="movie-reco-card__poster"
                                             style={
@@ -772,18 +783,23 @@ const MovieScreen: React.FC<MovieScreenProps> = ({
                                                     <span key={genre}>{genre.toUpperCase()}</span>
                                                 ))}
                                             </div>
-                                            <div className="movie-reco-card__tags">
-                                                <span className="pill pill--soft">
-                                                    ★ {avgLabel}
+                                        <div className="movie-reco-card__tags">
+                                            <span className="pill pill--soft">
+                                                ★ {avgLabel}
+                                            </span>
+                                            <span className="pill pill--soft">
+                                                ♥ {(movie.likeCount ?? 0).toLocaleString()}
+                                            </span>
+                                            {recoScoreMap.has(movie.id) && (
+                                                <span className="pill pill--outline">
+                                                    추천 {recoScoreMap.get(movie.id)!.toFixed(2)}
                                                 </span>
-                                                <span className="pill pill--soft">
-                                                    ♥ {(movie.likeCount ?? 0).toLocaleString()}
+                                            )}
+                                            {liked && (
+                                                <span className="pill pill--outline">
+                                                    ♥ 좋아요
                                                 </span>
-                                                {liked && (
-                                                    <span className="pill pill--outline">
-                                                        ♥ 좋아요
-                                                    </span>
-                                                )}
+                                            )}
                                             </div>
                                         </div>
                                     </button>

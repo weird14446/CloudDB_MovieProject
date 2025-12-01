@@ -1,6 +1,7 @@
 export type Review = {
   id: number;
   movieId: number;
+  userId: number; // [추가] 이 줄을 추가해주세요!
   userName: string;
   rating: number;
   content: string;
